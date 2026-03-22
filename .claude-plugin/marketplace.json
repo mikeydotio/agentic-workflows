@@ -5,5 +5,11 @@
   "owner": {
     "name": "mikeydotio"
   },
-  "plugins": []
+  "plugins": [
+    {
+      "name": "ideate",
+      "description": "Flesh out ideas through relentless questioning, assumption challenging, domain research, and cross-functional agent team execution",
+      "source": "./plugins/ideate"
+    }
+  ]
 }
