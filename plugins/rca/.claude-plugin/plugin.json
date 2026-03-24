@@ -1,0 +1,7 @@
+{
+  "name": "rca",
+  "description": "Perform thorough root cause analysis on bugs and regressions — find the REAL underlying cause, not just the symptom",
+  "author": {
+    "name": "mikeydotio"
+  }
+}
