@@ -1,6 +1,6 @@
 ---
 name: rca
-description: Use when the user encounters a bug, regression, or unexpected behavior and wants to find the true root cause — not just a quick fix. Systematically investigates symptoms, collects evidence, forms and challenges hypotheses, and produces a verified remediation plan that addresses the disease, not the symptom.
+description: Use when the user encounters a bug, regression, or unexpected behavior and wants to find the true root cause, not just a quick fix. Systematically investigates symptoms, collects evidence, forms and challenges hypotheses, and produces a verified remediation plan that addresses the disease, not the symptom.
 argument-hint: [bug description or symptom]
 ---
 
