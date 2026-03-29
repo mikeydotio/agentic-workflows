@@ -67,6 +67,6 @@ fi
 
 # Escape for JSON
 MSG="$(printf '%s' "$MSG" | sed 's/"/\\"/g')"
-printf '{"systemMessage":"%s"}\n' "$MSG"
+printf '{"additionalContext":"%s"}\n' "$MSG"
 
 exit 0
