@@ -25,6 +25,11 @@
       "name": "pilot",
       "description": "Autonomous execution harness — decomposes plans into stories, runs generator-evaluator loops, manages sessions with auto-resume",
       "source": "./plugins/pilot"
+    },
+    {
+      "name": "sentry",
+      "description": "Intelligent PreToolUse safety hook with deterministic command parsing, AI fallback, and permission mode awareness",
+      "source": "./plugins/sentry"
     }
   ]
 }

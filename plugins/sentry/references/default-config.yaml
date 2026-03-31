@@ -1,0 +1,41 @@
+# sentry configuration
+# Location: ~/.config/sentry/config.yaml
+# Changes take effect immediately (hook re-reads on every invocation)
+# Manage with /sentry command
+
+# Permission modes where sentry is DISABLED (space-separated)
+# Valid modes: default, plan, acceptEdits, bypassPermissions
+disabled_modes: bypassPermissions
+
+# Analysis mode: standard | strict | permissive
+#   standard   — deterministic allow/pass + AI fallback for uncertain
+#   strict     — everything uncertain passes to user (no AI)
+#   permissive — more lenient deterministic checks + AI for the rest
+mode: standard
+
+# AI fallback: call Claude API for uncertain commands
+ai_enabled: true
+
+# AI model for fallback analysis
+ai_model: claude-sonnet-4-6
+
+# AI request timeout in seconds
+ai_timeout: 10
+
+# Show AI rationale to user when AI is invoked
+ai_show_rationale: true
+
+# Custom always-allow commands (space-separated base command names)
+# Example: custom_allow: make tsc webpack
+custom_allow:
+
+# Custom always-pass commands (space-separated base command names)
+# Example: custom_pass: terraform ansible
+custom_pass:
+
+# Log decisions to file (empty = disabled)
+# Example: log_file: /home/you/.config/sentry/sentry.log
+log_file:
+
+# Verbose logging (debug-level detail)
+verbose: false
