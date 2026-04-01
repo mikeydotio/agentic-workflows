@@ -83,16 +83,16 @@ log_decision() {
 allow() {
   local reason="$1"
   log_decision "ALLOW" "${TOOL_NAME}: ${reason}"
-  printf '{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"allow","permissionDecisionReason":"%s"}}\n' "$reason"
+  jq -n --arg reason "$reason" \
+    '{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"allow","permissionDecisionReason":$reason}}'
   exit 0
 }
 
 pass_with_context() {
   local reason="$1" context="$2"
   log_decision "PASS" "${TOOL_NAME}: ${reason}"
-  # Escape JSON special characters in context
-  context="$(printf '%s' "$context" | sed 's/\\/\\\\/g; s/"/\\"/g; s/\t/\\t/g' | tr '\n' ' ')"
-  printf '{"hookSpecificOutput":{"hookEventName":"PreToolUse","additionalContext":"%s"}}\n' "$context"
+  jq -n --arg ctx "$context" \
+    '{"hookSpecificOutput":{"hookEventName":"PreToolUse","additionalContext":$ctx}}'
   exit 0
 }
 
@@ -264,7 +264,7 @@ is_always_safe() {
     # terminal image / media viewers
     viu|timg|chafa|imgcat|mediainfo|ffprobe|exiv2) return 0 ;;
     # markdown / document rendering
-    glow|mdcat|pandoc) return 0 ;;
+    glow|mdcat) return 0 ;;
     # benchmarking (only measures, no side effects)
     hyperfine|bench) return 0 ;;
     # container image inspection (readonly)
@@ -914,6 +914,8 @@ is_safe_segment() {
     # test runners — generally safe (they run tests, don't modify code)
     jest|vitest|mocha|pytest|rspec|phpunit|junit|ava|tap|nyc|c8)
                                       return 0 ;;
+    # pandoc — safe for rendering, but -o flag writes files
+    pandoc)                           [[ "$segment" != *" -o "* && "$segment" != *" --output"* ]] && return 0 ;;
   esac
 
   return 1  # uncertain
@@ -1023,8 +1025,8 @@ PROMPT_END
     # AI says safe — allow, but still surface rationale if configured
     if [[ "$CFG_AI_SHOW_RATIONALE" == "true" ]]; then
       log_decision "ALLOW" "AI confirmed safe: ${rationale}"
-      printf '{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"allow","permissionDecisionReason":"AI confirmed safe","additionalContext":"[sentry] AI analysis: %s"}}\n' \
-        "$(printf '%s' "$rationale" | sed 's/\\/\\\\/g; s/"/\\"/g; s/\t/\\t/g' | tr '\n' ' ')"
+      jq -n --arg rationale "[sentry] AI analysis: ${rationale}" \
+        '{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"allow","permissionDecisionReason":"AI confirmed safe","additionalContext":$rationale}}'
       exit 0
     else
       allow "AI confirmed safe"

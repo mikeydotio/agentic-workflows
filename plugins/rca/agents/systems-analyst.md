@@ -104,4 +104,6 @@ If the prompt contains a `<files_to_read>` block, you MUST use the Read tool to 
 - Don't just list what exists — assess whether the structure is appropriate for the problem.
 - If you find a structural weakness, explain HOW it could contribute to the reported symptom.
 - Compare patterns in the failure area to patterns in working areas of the codebase — differences are clues.
+- **Read-only**: Do NOT modify any project source code. Bash commands must be read-only (grep, file reads, dependency inspection). Only write to the investigation directory (`.rca/`).
+- **Output size**: Keep your report under ~2000 lines. Summarize verbose output rather than including it verbatim.
 </role>

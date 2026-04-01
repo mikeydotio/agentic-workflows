@@ -64,16 +64,12 @@ The window should exceed the expected maximum duration of a single story (genera
 - **Too short**: False stale-lock detection → duplicate work
 - **Too long**: Delayed crash recovery
 
-**Worst-case resume latency**: heartbeat window + trigger interval = ~45 minutes (30 + 15 default).
+**Worst-case resume latency**: heartbeat window only = ~30 minutes (default). Freshen fires immediately when the session ends, so there is no trigger interval component. The heartbeat window only matters for crash recovery (stale lock detection).
 
 ## Edge Cases
 
 ### Concurrent Resume Attempts
-Two triggers fire simultaneously:
-1. First one checks lock → stale → breaks and acquires
-2. Second one checks lock → fresh (just acquired by first) → exits
-Race window is small (< 1 second between check and acquire). Acceptable risk.
+Freshen is fire-once per pause, so concurrent triggers are not a concern under normal operation. If a user manually runs `/pilot resume` while a freshen-triggered resume is starting, the lock check prevents duplicate work: the second attempt sees a fresh heartbeat and exits.
 
 ### Session Crash Without Lock Release
-Next trigger fires → finds stale heartbeat → breaks lock → resumes normally.
-Recovery sequence handles in-progress/verifying stories (resets to todo).
+The session-stop hook attempts to queue a freshen signal for auto-resume. If the signal was queued successfully, the next session starts automatically. If not (hook failed to run, tmux unavailable), the user must manually run `/pilot resume`. The recovery sequence handles in-progress/verifying stories (resets to todo).

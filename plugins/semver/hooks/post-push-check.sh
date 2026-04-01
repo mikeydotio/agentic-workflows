@@ -44,6 +44,13 @@ GIT_TAGGING="$(get_config 'git_tagging' 'true')"
 # Tracking off -> silent exit
 [[ "$TRACKING" != "true" ]] && exit 0
 
+# Suppress auto-bump during pilot execution — pilot manages its own commit flow
+PILOT_STATE="${CWD}/.pilot/state.json"
+if [[ -f "$PILOT_STATE" ]]; then
+  PILOT_STATUS="$(jq -r '.status // empty' "$PILOT_STATE" 2>/dev/null)"
+  [[ "$PILOT_STATUS" == "running" ]] && exit 0
+fi
+
 # Check if push was to the target branch
 PUSH_TO_TARGET=false
 
@@ -82,9 +89,7 @@ fi
 # --- Build output based on config state ---
 emit_message() {
   local msg="$1"
-  # Escape double quotes and newlines for JSON
-  msg="$(printf '%s' "$msg" | sed 's/"/\\"/g' | tr '\n' ' ')"
-  printf '{"systemMessage":"%s"}\n' "$msg"
+  jq -n --arg msg "$msg" '{"systemMessage":$msg}'
 }
 
 if [[ "$AUTO_BUMP" != "true" ]]; then

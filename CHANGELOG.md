@@ -3,6 +3,31 @@
 All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
+## [v2.1.0] - 2026-04-01
+
+### Added
+- **Unified pilot pipeline** — merged ideate and pilot into a single idea-to-deployment plugin with 11 pipeline skills (interrogate, research, design, plan, decompose, execute, review, validate, triage, document, deploy) orchestrated by a state-machine router (`69fa065`..`828d92b`)
+- **3 new agents** — reviewer (static gap/defect analysis), validator (test hardening), triager (FIX/ESCALATE deliberation) (`d512d2d`)
+- **FIX/ESCALATE triage loop** — after execution, review + validate run in parallel, then triage labels findings as FIX (auto-fix, max 3 cycles) or ESCALATE (user decides); `--yolo` mode fixes everything up to 10 cycles (`d512d2d`)
+- **Step exit protocol** — every orchestrated step writes artifacts, handoff to `.pilot/handoffs/`, commits, and queues freshen for context clearing (`69fa065`)
+- **Severity levels and report format** references — standardized Critical/Important/Useful finding structure with solution options and pros/cons (`d512d2d`)
+- **Legacy migration detection** — pilot orchestrator detects `.planning/ideate/` artifacts and offers to migrate them to `.pilot/` (`828d92b`)
+- **Post-document pause** — pipeline always pauses after documentation for user review before deployment; deploy never proceeds without explicit permission
+
+### Changed
+- Pilot artifacts now live in `.pilot/` (version-controlled handoffs, fix-cycle archives) instead of `.planning/pilot/`
+- Handoffs moved from single `.pilot/handoff.md` to versioned `.pilot/handoffs/handoff-<step>.md` directory
+- Session hooks updated to read/write from `.pilot/handoffs/` directory
+- 12 agents migrated from ideate to pilot with namespace updates (15 total)
+- 10 pilot reference docs updated with `.pilot/` path references
+- 3 ideate references migrated to pilot (questioning, team-roles, step-handoff)
+- CLAUDE.md updated for unified pipeline architecture
+
+### Deprecated
+- **Ideate plugin** (`/ideate`) — use `/pilot` instead; deprecation notices added to SKILL.md and README.md
+
+_[manual]_
+
 ## [v2.0.0] - 2026-03-31
 
 ### Breaking

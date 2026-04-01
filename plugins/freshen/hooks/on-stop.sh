@@ -1,10 +1,17 @@
 #!/usr/bin/env bash
+set -euo pipefail
 # freshen Stop hook — if a signal file exists, send /clear via tmux.
 #
 # The keys buffer in tmux until the prompt appears, so no sleep is needed.
 # The post-clear hook (on-clear.sh) handles the re-invocation.
 
 FRESHEN_DIR=".freshen"
+
+# Directory must exist
+[ -d "$FRESHEN_DIR" ] || exit 0
+
+# Delete stale signals (older than 2 hours)
+find "$FRESHEN_DIR" -name '*.signal' -mmin +120 -delete 2>/dev/null || true
 
 # Any signal files pending?
 SIGNAL=$(ls "$FRESHEN_DIR"/*.signal 2>/dev/null | head -1)
@@ -14,5 +21,8 @@ SIGNAL=$(ls "$FRESHEN_DIR"/*.signal 2>/dev/null | head -1)
 [ -n "${TMUX:-}" ] || exit 0
 [ -n "${TMUX_PANE:-}" ] || exit 0
 
-# Send /clear — keys buffer until the prompt accepts input
+# Set clear-pending flag so on-clear.sh knows this was freshen-initiated
+touch "$FRESHEN_DIR/.clear-pending"
+
+# Send /clear — fail-fast if send-keys fails (no retry)
 tmux send-keys -t "$TMUX_PANE" "/clear" Enter

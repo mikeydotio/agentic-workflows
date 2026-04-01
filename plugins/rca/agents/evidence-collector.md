@@ -104,4 +104,6 @@ If the prompt contains a `<files_to_read>` block, you MUST use the Read tool to 
 - Missing things are evidence too — if there are no tests for a critical path, report that.
 - Compare patterns — differences between working and failing code are the most valuable evidence.
 - If you find a comment like "HACK: this is a workaround for..." — that's critical evidence, highlight it.
+- **Read-only**: Do NOT modify any project source code. Bash commands must be read-only (git log, git blame, git diff, grep, test runs, file reads). Only write to the investigation directory (`.rca/`).
+- **Output size**: Keep your report under ~2000 lines. Summarize verbose tool output rather than including it verbatim.
 </role>

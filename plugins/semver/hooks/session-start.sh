@@ -65,8 +65,7 @@ if [[ "$GIT_TAGGING" == "true" ]]; then
   fi
 fi
 
-# Escape for JSON
-MSG="$(printf '%s' "$MSG" | sed 's/"/\\"/g')"
-printf '{"additionalContext":"%s"}\n' "$MSG"
+# Output via jq for safe JSON encoding
+jq -n --arg msg "$MSG" '{"additionalContext":$msg}'
 
 exit 0

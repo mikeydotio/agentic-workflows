@@ -40,7 +40,7 @@ Perform thorough root cause analysis on bugs and regressions — find the REAL u
 
 ## Artifacts
 
-All state is written to `.planning/rca/`:
+Each investigation writes artifacts to `.rca/<slug>/` (gitignored):
 
 | Artifact | Phase | Contents |
 |----------|-------|----------|
@@ -48,6 +48,6 @@ All state is written to `.planning/rca/`:
 | `EVIDENCE.md` | 2 | Collected evidence from git history, architecture, and code analysis |
 | `HYPOTHESES.md` | 3 | Ranked hypotheses with evidence assessment and falsification tests |
 | `VERIFICATION.md` | 4 | Verified root cause with causal chain and heuristic checks |
-| `PLAN.md` | 5 | Remediation plan with anti-pattern checks and regression prevention |
+| `REMEDIATION.md` | 5 | Remediation plan with anti-pattern checks and regression prevention |
 
-Work can be resumed from any phase based on which artifacts exist.
+Phase 1 is interactive. After intake, Phases 2-4 run in a background agent. The user re-invokes `/rca` to review completed investigations and proceed to Phase 5 (remediation).

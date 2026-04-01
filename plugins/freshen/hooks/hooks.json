@@ -23,6 +23,16 @@
             "timeout": 5
           }
         ]
+      },
+      {
+        "matcher": "startup,resume,compact",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "rm -f .freshen/*.signal .freshen/.clear-pending 2>/dev/null; exit 0",
+            "timeout": 3
+          }
+        ]
       }
     ]
   }

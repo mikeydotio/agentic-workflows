@@ -47,13 +47,14 @@ cmd_queue() {
 
   local signal_file="$FRESHEN_DIR/${source}.signal"
 
-  # Warn if a signal from a DIFFERENT source already exists
+  # Cross-source conflict is a hard error — only one source may be pending at a time.
+  # Same-source overwrite is fine (idempotent re-queue).
   for existing in "$FRESHEN_DIR"/*.signal; do
     [ -f "$existing" ] || continue
     local existing_source
     existing_source=$(basename "$existing" .signal)
     if [ "$existing_source" != "$source" ]; then
-      echo "Warning: signal already pending from '$existing_source' ($(cat "$existing"))" >&2
+      die "signal already pending from '$existing_source' ($(cat "$existing")). Cancel it first with: freshen.sh cancel --source $existing_source"
     fi
   done
 

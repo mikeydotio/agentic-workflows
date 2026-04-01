@@ -9,7 +9,7 @@ Sentry evaluates every tool call for safety before execution. It auto-allows kno
 
 ## Config File
 
-`~/.config/sentry/config.yaml` — flat YAML, changes take effect immediately.
+`~/.config/sentry/config.yaml` — strict `key: value` flat format (no nesting, no arrays, no multi-line values). Changes take effect immediately — the hook re-reads on every invocation.
 
 ## Command Router
 
@@ -165,3 +165,4 @@ EOF
 - `ANTHROPIC_API_KEY` must be set as an environment variable for AI fallback. Not stored in config.
 - The hook never blocks tool execution on failure. Worst case: defers to user.
 - Sentry supersedes the older `safe-readonly.sh` hook.
+- **Scope**: Sentry only evaluates Bash commands. Write and Edit tool calls are not intercepted — they go through Claude Code's built-in permission system.

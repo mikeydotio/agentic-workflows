@@ -56,6 +56,34 @@ Pilot handoffs use four complementary persistence layers:
 - [Any decisions needed from user]
 ```
 
+## Incremental Handoff Updates
+
+After each story completes (Step 7 of the execution loop), update handoff.md incrementally rather than rewriting from scratch. This ensures crash recovery has fresh context even without a clean pause.
+
+**Before** (after HP-5 completes):
+```markdown
+## Stories Completed This Session
+- HP-5: Create config module — loads YAML, returns typed config object
+
+## Working Context
+### Patterns Established
+- Config uses strict zod schemas — all fields required, no defaults
+```
+
+**After** (HP-6 also completes — append to existing sections):
+```markdown
+## Stories Completed This Session
+- HP-5: Create config module — loads YAML, returns typed config object
+- HP-6: Create logger module — structured JSON to stdout, uses config for log level
+
+## Working Context
+### Patterns Established
+- Config uses strict zod schemas — all fields required, no defaults
+- Logger wraps pino, all modules import from src/logger.ts (not pino directly)
+```
+
+Only append — never remove prior entries. The handoff grows throughout the session.
+
 ## Writing the Handoff
 
 The handoff is written at these triggers:

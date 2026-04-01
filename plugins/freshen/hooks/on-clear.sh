@@ -1,25 +1,34 @@
 #!/usr/bin/env bash
+set -euo pipefail
 # freshen SessionStart(clear) hook — after /clear, process the oldest signal.
 #
-# Reads the signal file, deletes it, and sends the re-invocation command
-# via tmux send-keys. The keys buffer until the prompt accepts input.
+# Reads the signal file, sends the re-invocation command via tmux send-keys,
+# then deletes the signal only on success.
 
 FRESHEN_DIR=".freshen"
 
+# Directory must exist
+[ -d "$FRESHEN_DIR" ] || exit 0
+
+# Only process if clear-pending flag exists (freshen-initiated clear).
+# If missing, this was a user-initiated /clear — skip processing.
+[ -f "$FRESHEN_DIR/.clear-pending" ] || exit 0
+
 # Find the oldest signal file (by modification time)
 SIGNAL=$(ls -tr "$FRESHEN_DIR"/*.signal 2>/dev/null | head -1)
-[ -n "$SIGNAL" ] || exit 0
+[ -n "$SIGNAL" ] || { rm -f "$FRESHEN_DIR/.clear-pending"; exit 0; }
 
 COMMAND=$(cat "$SIGNAL")
-SOURCE=$(basename "$SIGNAL" .signal)
 
-# Nuke the signal BEFORE sending keys — prevents re-triggering
-rm "$SIGNAL"
+# tmux is required
+[ -n "${TMUX:-}" ] || { rm -f "$FRESHEN_DIR/.clear-pending"; exit 0; }
+[ -n "${TMUX_PANE:-}" ] || { rm -f "$FRESHEN_DIR/.clear-pending"; exit 0; }
 
-# tmux is required — if not available, the signal is already nuked so we just lose it
-# (this shouldn't happen: freshen.sh queue validates tmux at registration time)
-[ -n "${TMUX:-}" ] || exit 0
-[ -n "${TMUX_PANE:-}" ] || exit 0
+# Send the re-invocation command (literal mode to avoid key interpretation)
+if tmux send-keys -t "$TMUX_PANE" -l "$COMMAND"; then
+  tmux send-keys -t "$TMUX_PANE" Enter
+  rm "$SIGNAL"
+fi
 
-# Send the re-invocation command
-tmux send-keys -t "$TMUX_PANE" "$COMMAND" Enter
+# Clean up the clear-pending flag
+rm -f "$FRESHEN_DIR/.clear-pending"

@@ -66,7 +66,7 @@ After PLAN.md is approved (Phase 4), ideate presents an execution choice:
    - "Execute here (ideate Phase 5)"
    - "Just the plan — I'll execute manually"
 3. If "Autonomous via pilot":
-   - Invoke `/pilot plan` with `.planning/PLAN.md`
+   - Invoke `/pilot plan` with `.planning/ideate/PLAN.md`
    - Report story count and dependency structure
    - Ask: "Start autonomous execution now?"
    - If yes → `/pilot run`

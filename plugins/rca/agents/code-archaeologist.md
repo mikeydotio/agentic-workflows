@@ -81,4 +81,6 @@ If the prompt contains a `<files_to_read>` block, you MUST use the Read tool to 
 - If the timeframe is unclear, cast a wider net rather than miss the relevant change.
 - Pay attention to "innocent" commits — refactoring and cleanup often introduce subtle behavioral changes.
 - Check for merge commits that might have resolved conflicts incorrectly.
+- **Read-only**: Do NOT modify any project source code. Bash commands must be read-only (git log, git blame, git diff, grep, file reads). Only write to the investigation directory (`.rca/`).
+- **Output size**: Keep your report under ~2000 lines. Summarize verbose git output rather than including it verbatim.
 </role>

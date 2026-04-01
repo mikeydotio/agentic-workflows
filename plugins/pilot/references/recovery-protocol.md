@@ -15,7 +15,7 @@ Resume and recovery sequence for pilot — restoring context after session bound
 
 - Read `.pilot/state.json`
 - If missing or malformed → report clear error, exit (do not guess)
-- If `status` is `complete` → remove trigger if still present, exit
+- If `status` is `complete` → cancel freshen signal if pending (`bash plugins/freshen/bin/freshen.sh cancel --source pilot`), exit
 
 ### 3. Handoff Read (Primary Context Source)
 
@@ -49,21 +49,20 @@ Check what's available:
 - No stories, all `done` → transition to `complete` (even if state.json said `paused`)
 - No stories, some `blocked` → pause: "blocked stories remain — user intervention needed"
 
-### 6. Context Gathering
+### 6. Context Gathering and Validation
+
+Run context gathering and validation as a single step:
 
 ```bash
 git log --oneline -10
 ```
 
-Run test suite to verify codebase health.
+Run the project test suite — this simultaneously verifies codebase health AND validates handoff claims:
 
-### 6a. Context Validation
-
-Compare handoff.md claims against actual disk state to guard against stale handoffs:
-
-- If handoff says "tests pass" → run tests to verify
+- If handoff says "tests pass" but tests fail → trust current state, not handoff
 - If handoff references files that don't exist → note discrepancy, remove from code landmarks
 - If git log shows commits not mentioned in handoff → session crashed mid-story, flag this
+- If handoff has a `## WARNING: Incomplete Handoff` section → treat as degraded context, log to verdict history
 
 This step is especially important when the handoff is from a much older session. Trust current disk state over handoff claims when they conflict.
 

@@ -6,7 +6,7 @@ argument-hint: [bug description or symptom]
 
 # RCA: Root Cause Analysis
 
-You are a root cause analysis orchestrator. Your job is to take a reported bug or regression and systematically trace it back to its TRUE underlying cause — then design a fix that addresses the disease, not the symptom. You do this through five phases, each building on the last.
+You are a root cause analysis orchestrator. Your job is to take a reported bug or regression and systematically trace it back to its TRUE underlying cause — then design a fix that addresses the disease, not the symptom.
 
 **Read these references before starting:**
 - `references/rca-methodology.md` — RCA techniques (5 Whys, Fishbone, Fault Tree, Change Analysis)
@@ -21,26 +21,51 @@ You are a root cause analysis orchestrator. Your job is to take a reported bug o
 4. **Multiple hypotheses, always.** Never settle on a single explanation without generating and evaluating alternatives.
 5. **Verify the root cause.** Every proposed root cause must pass the "would fixing this prevent recurrence?" test.
 6. **Resist symptom masking.** If a proposed fix adds a defensive check, error handler, or retry without addressing WHY the bad state occurs, it is symptom masking. Flag it.
-7. **Document for resumption.** Every phase produces artifacts in `.planning/rca/` that allow work to be restarted from that point.
+7. **Investigative agents are read-only.** Agents in Phases 2-4 must not modify the codebase. Bash commands must be read-only (git log, grep, test runs, etc.).
 
-## Resumption Protocol
+## Entry Point
 
-Before starting, check for existing artifacts in `.planning/rca/`:
+When `/rca` is invoked, check for existing investigations:
 
-| If you find... | Resume from... |
-|----------------|---------------|
-| Nothing in .planning/rca/ | Phase 1: Symptom Intake |
-| SYMPTOM.md only | Phase 2: Evidence Collection |
-| SYMPTOM.md + EVIDENCE.md | Phase 3: Hypothesis Formation |
-| SYMPTOM.md + EVIDENCE.md + HYPOTHESES.md | Phase 4: Root Cause Verification |
-| SYMPTOM.md + EVIDENCE.md + HYPOTHESES.md + VERIFICATION.md | Phase 5: Remediation Plan |
-| PLAN.md present | Done — present the plan to the user |
+```bash
+ls -d .rca/*/ 2>/dev/null
+```
 
-When resuming, read all existing artifacts first, summarize what's been done, then continue from the appropriate phase.
+### If investigations exist — List and Pick
+
+Display all investigations with their status:
+
+| Investigation | Status | Created |
+|--------------|--------|---------|
+| `.rca/<slug>/` | running / complete / reviewed | timestamp from SYMPTOM.md |
+
+Status is determined by:
+- **running**: Background agent is still active (check if `VERIFICATION.md` exists — if not, still running)
+- **complete**: `VERIFICATION.md` exists but `REMEDIATION.md` does not — ready for user review
+- **reviewed**: `REMEDIATION.md` exists — investigation is done
+
+Use AskUserQuestion:
+
+- **header:** "RCA Investigations"
+- **question:** "You have existing investigations. What would you like to do?"
+- **options:**
+  - label: "Review [slug]" / description: "[one-line from SYMPTOM.md]" (for each complete investigation)
+  - label: "Check [slug]" / description: "Still running — check status" (for each running investigation)
+  - label: "New investigation" / description: "Start a fresh investigation"
+
+**If "Review":** Read the investigation artifacts, present a summary of findings, then proceed to Phase 5 (Remediation).
+
+**If "Check":** Report what artifacts exist and what phase is in progress. The user can wait or start a new investigation.
+
+**If "New":** Proceed to Phase 1.
+
+### If no investigations exist — Start New
+
+Proceed directly to Phase 1.
 
 ---
 
-## Phase 1: Symptom Intake
+## Phase 1: Symptom Intake (Interactive)
 
 Your goal is to build such a thorough understanding of the symptom that you could describe the exact failure to someone who has never seen the codebase. Resist the urge to jump to code — understand the BEHAVIOR first.
 
@@ -115,7 +140,9 @@ When you could write a comprehensive symptom report, present your understanding 
 
 ### Output
 
-Write `.planning/rca/SYMPTOM.md`:
+Generate a slug from the bug description (lowercase, hyphens, 3-5 words, e.g., `auth-token-expiry-race`).
+
+Create `.rca/<slug>/` and write `SYMPTOM.md`:
 
 ```markdown
 # Symptom Report
@@ -150,13 +177,44 @@ Write `.planning/rca/SYMPTOM.md`:
 [Files, functions, or components the user mentioned or that are likely involved]
 ```
 
-Commit: `git commit "docs(rca): capture symptom report"`
+### Launch Background Investigation
+
+After writing SYMPTOM.md, spawn a **background agent** to run Phases 2-4 autonomously:
+
+```
+Agent(
+  subagent_type: "general-purpose",
+  run_in_background: true,
+  prompt: <see Background Investigation Prompt below>
+)
+```
+
+Tell the user:
+
+"Investigation launched in the background. I'll analyze git history, architecture, and code patterns, then form and verify hypotheses. Run `/rca` again when you're ready to check on progress or review findings."
+
+End your response immediately. Do not call any more tools or generate additional content.
 
 ---
 
-## Phase 2: Evidence Collection
+## Background Investigation Prompt
 
-Now you investigate the code. Spawn multiple agents in parallel to gather evidence from different angles. Do NOT form hypotheses yet — gather facts.
+The background agent receives the full RCA skill context and executes Phases 2-4 sequentially. Its prompt includes:
+
+1. The three reference files (methodology, symptom-vs-root-cause, architectural-patterns)
+2. The SYMPTOM.md contents
+3. The investigation directory path (`.rca/<slug>/`)
+4. Instructions for Phases 2, 3, and 4 (copied from below)
+5. **Read-only constraint**: "You must NOT modify any project source code. Bash commands must be read-only: git log, git blame, git diff, grep, test runs, file reads. Do NOT write to any file outside `.rca/<slug>/`."
+6. **Output size constraint**: "Keep each artifact under ~2000 lines. Summarize verbose tool output rather than including it verbatim."
+
+The background agent writes artifacts to `.rca/<slug>/` as it completes each phase. When Phase 4 completes, it writes `VERIFICATION.md` — this is the signal that the investigation is ready for review.
+
+---
+
+## Phase 2: Evidence Collection (Background)
+
+Spawn multiple agents in parallel to gather evidence from different angles. Do NOT form hypotheses yet — gather facts.
 
 ### Agent Spawns
 
@@ -165,21 +223,34 @@ Spawn all three in parallel:
 1. **`rca:code-archaeologist`**
    - Prompt with: SYMPTOM.md contents, relevant file paths, timeline from symptom report
    - Focus: git history around symptom area — recent changes, blame, diffs, dependency changes
-   - Provide `<files_to_read>` block with the path to SYMPTOM.md
 
 2. **`rca:systems-analyst`**
    - Prompt with: SYMPTOM.md contents, relevant file paths
    - Focus: architecture around the failure — components, dependencies, coupling, data flow
-   - Provide `<files_to_read>` block with the path to SYMPTOM.md
 
 3. **`rca:evidence-collector`**
    - Prompt with: SYMPTOM.md contents, relevant file paths
    - Focus: code patterns — error handling, test coverage, pattern comparison, code smells, env deps
-   - Provide `<files_to_read>` block with the path to SYMPTOM.md
+
+### Inconclusive Exit Ramp
+
+If all three agents return minimal or no relevant findings:
+- Write `.rca/<slug>/EVIDENCE.md` documenting the absence of findings
+- Write `.rca/<slug>/INCONCLUSIVE.md`:
+  ```markdown
+  # Investigation Inconclusive
+  ## Phase: Evidence Collection
+  ## Reason: No relevant evidence found
+  ## Suggestions
+  - The bug may require runtime debugging (breakpoints, logging) not available to static analysis
+  - Consider providing more specific reproduction steps
+  - The failure may be environmental — check runtime logs, monitoring dashboards
+  ```
+- Stop the background investigation. The user will see the inconclusive status on next `/rca` invocation.
 
 ### Synthesis
 
-After all agents report, synthesize findings into `.planning/rca/EVIDENCE.md`:
+After all agents report, synthesize findings into `.rca/<slug>/EVIDENCE.md`:
 
 ```markdown
 # Evidence Report
@@ -219,27 +290,11 @@ After all agents report, synthesize findings into `.planning/rca/EVIDENCE.md`:
 [Bulleted list of the most important evidence items, ranked by relevance to the symptom]
 ```
 
-Commit: `git commit "docs(rca): evidence collection complete"`
-
-### User Briefing
-
-Present top findings as plain text. Then:
-
-- **header:** "Evidence"
-- **question:** "Does any of this ring a bell? Any of these changes or patterns look suspicious to you?"
-- **options:**
-  - label: "[Most suspicious item]" / description: "This looks relevant"
-  - label: "[Second suspicious item]" / description: "This stands out"
-  - label: "Nothing obvious" / description: "Keep investigating"
-  - label: "I have context" / description: "Let me share what I know about this"
-
-Incorporate their input before proceeding.
-
 ---
 
-## Phase 3: Hypothesis Formation
+## Phase 3: Hypothesis Formation (Background)
 
-Now form hypotheses. The key discipline: generate MULTIPLE competing explanations, never fall in love with the first one.
+Form hypotheses. The key discipline: generate MULTIPLE competing explanations, never fall in love with the first one.
 
 ### 5 Whys Methodology
 
@@ -273,7 +328,7 @@ For complex bugs, additionally categorize potential causes:
 
 ### Hypothesis Generation
 
-Generate at least 3 hypotheses, ranked by evidence strength. For each:
+Generate at least 2-3 hypotheses depending on evidence strength, ranked by evidence strength. For each:
 
 - **Statement:** One sentence describing the proposed root cause
 - **Evidence for:** Facts from EVIDENCE.md that support this
@@ -281,21 +336,9 @@ Generate at least 3 hypotheses, ranked by evidence strength. For each:
 - **Falsification test:** "If this is the root cause, then [specific prediction] should be true — check it"
 - **Would fixing this prevent recurrence?** Yes/No with reasoning
 
-### User Input
-
-Present hypotheses as plain text, then:
-
-- **header:** "Hypotheses"
-- **question:** "Which of these feels most likely based on your experience with this codebase?"
-- **options:**
-  - label: "[H1 brief label]" / description: "[one-line summary]"
-  - label: "[H2 brief label]" / description: "[one-line summary]"
-  - label: "[H3 brief label]" / description: "[one-line summary]"
-  - label: "None of these" / description: "I suspect something else"
-
 ### Output
 
-Write `.planning/rca/HYPOTHESES.md`:
+Write `.rca/<slug>/HYPOTHESES.md`:
 
 ```markdown
 # Hypothesis Report
@@ -328,21 +371,13 @@ Write `.planning/rca/HYPOTHESES.md`:
 ### H2: [Second hypothesis] — Confidence: HIGH/MEDIUM/LOW
 ...
 
-### H3: [Third hypothesis] — Confidence: HIGH/MEDIUM/LOW
-...
-
-## User's Assessment
-[What the user thought was most likely and any additional context they shared]
-
 ## Recommended Investigation Priority
 1. [Which hypothesis to verify first and why]
 ```
 
-Commit: `git commit "docs(rca): hypotheses formed"`
-
 ---
 
-## Phase 4: Root Cause Verification
+## Phase 4: Root Cause Verification (Background)
 
 The most critical phase. Verify the top hypothesis rigorously. The temptation to accept a plausible explanation without verification is the #1 cause of band-aid fixes.
 
@@ -355,48 +390,40 @@ For the top-ranked hypothesis:
 2. **Run the falsification test.** Execute the test defined in HYPOTHESES.md. If it fails, demote this hypothesis and try the next.
 
 3. **Spawn `rca:hypothesis-challenger`:**
-   - Prompt: "Challenge this root cause hypothesis: [H1 statement]. Here's the evidence: [evidence summary]. Try to disprove it. Consider: (1) Could the evidence be coincidental? (2) Could there be a deeper cause? (3) Does this explanation account for ALL symptoms? (4) Would the proposed fix actually prevent recurrence?"
-   - Provide `<files_to_read>` block with paths to SYMPTOM.md, EVIDENCE.md, HYPOTHESES.md
+   - Prompt: "Challenge this root cause hypothesis: [H1 statement]. Here's the evidence: [evidence summary]. Try to disprove it."
 
-4. **Apply symptom-vs-root-cause heuristics** (from `references/symptom-vs-root-cause.md`):
-   - Does the fix address a STRUCTURAL issue or just add a defensive check?
-   - Would fixing this prevent MULTIPLE symptom manifestations?
-   - Does the fix violate any existing invariants?
-   - Does the fix require careful ordering or multiple coordinated changes? (Red flag)
-   - Is the fix generalizable — does it teach something about the architecture?
+4. **Apply symptom-vs-root-cause heuristics** (from `references/symptom-vs-root-cause.md`)
 
-5. **Check for architectural patterns** (from `references/architectural-patterns.md`):
-   - Is this a leaky abstraction?
-   - Is this shared mutable state?
-   - Is this temporal coupling?
-   - Is this a missing or violated invariant?
-   - Is this an abstraction mismatch?
-   - Is this implicit coupling?
-   - Is this an error propagation failure?
+5. **Check for architectural patterns** (from `references/architectural-patterns.md`)
 
 ### Verification Outcomes
 
-- **VERIFIED:** The causal chain is complete, traceable in code, passes all heuristics, and survives the challenger's scrutiny. Proceed to Phase 5.
+- **VERIFIED:** The causal chain is complete, traceable in code, passes all heuristics, and survives the challenger's scrutiny. Write VERIFICATION.md.
 - **PARTIALLY VERIFIED:** Some links are solid, others are uncertain. Gather more evidence for the weak links — spawn `rca:evidence-collector` with targeted queries.
-- **REFUTED:** The hypothesis fails verification. Return to HYPOTHESES.md, demote H1, promote H2, and repeat Phase 4.
+- **REFUTED:** The hypothesis fails verification. Demote H1, promote H2, and repeat Phase 4.
 - **DEEPER CAUSE FOUND:** The challenger or heuristics reveal a cause beneath the proposed one. Update the 5 Whys chain, generate new hypothesis, and re-verify.
 
-### User Checkpoint
+### Inconclusive Exit Ramp
 
-Present verification results as plain text, then:
-
-- **header:** "Verified?"
-- **question:** "The root cause appears to be: [one sentence]. Does this match your intuition?"
-- **options:**
-  - label: "Yes" / description: "That explains it"
-  - label: "Partially" / description: "But what about [aspect]?"
-  - label: "Not convinced" / description: "Let me explain why"
-
-If the user pushes back, treat it as new evidence and loop.
+If ALL hypotheses are refuted and no new hypotheses can be generated from the evidence:
+- Write `.rca/<slug>/INCONCLUSIVE.md`:
+  ```markdown
+  # Investigation Inconclusive
+  ## Phase: Verification
+  ## Reason: All hypotheses refuted
+  ## Hypotheses Tested
+  - H1: [statement] — refuted because [reason]
+  - H2: [statement] — refuted because [reason]
+  ## Suggestions
+  - Additional reproduction data or runtime traces may reveal new evidence
+  - Consider a different investigation angle (environmental, data-driven)
+  - The root cause may span multiple components — try a broader scope
+  ```
+- Stop the background investigation.
 
 ### Output
 
-Write `.planning/rca/VERIFICATION.md`:
+Write `.rca/<slug>/VERIFICATION.md`:
 
 ```markdown
 # Root Cause Verification
@@ -438,37 +465,47 @@ N. [Root Cause] — verified by [structural analysis]
 | Hypothesis | Why Eliminated |
 |-----------|----------------|
 | [H2] | [reason] |
-| [H3] | [reason] |
 ```
-
-Commit: `git commit "docs(rca): root cause verified"`
 
 ---
 
-## Phase 5: Remediation Plan
+## Phase 5: Remediation (Interactive)
 
-Design a fix that addresses the root cause. The fix must pass the same heuristics used to verify the root cause.
+This phase runs when the user reviews a completed investigation. Read all artifacts from `.rca/<slug>/`, then present the findings.
 
-### Spawn `rca:remediation-architect`
+### Present Findings
 
-- Prompt: "Design a fix for this verified root cause: [root cause statement]. The fix must: (1) address the structural issue, not just mask the symptom, (2) prevent recurrence, (3) not introduce new invariant violations, (4) include regression tests. Consider the architecture described in EVIDENCE.md and the causal chain in VERIFICATION.md."
-- Provide `<files_to_read>` block with paths to all artifacts: SYMPTOM.md, EVIDENCE.md, HYPOTHESES.md, VERIFICATION.md
+Summarize the investigation as plain text:
+- What the root cause is (from VERIFICATION.md)
+- The causal chain
+- The confidence level
+- Key evidence
+
+Then use AskUserQuestion:
+
+- **header:** "Root Cause"
+- **question:** "The root cause appears to be: [one sentence]. Does this match your intuition?"
+- **options:**
+  - label: "Yes" / description: "That explains it — let's design a fix"
+  - label: "Partially" / description: "But what about [aspect]?"
+  - label: "Not convinced" / description: "Let me explain why"
+
+If the user pushes back, treat it as new evidence and potentially re-run parts of the investigation.
+
+### Design Remediation
+
+Spawn `rca:remediation-architect`:
+- Prompt: "Design a fix for this verified root cause: [root cause statement]. The fix must: (1) address the structural issue, not just mask the symptom, (2) prevent recurrence, (3) not introduce new invariant violations, (4) include regression tests."
+- Provide all investigation artifacts as context.
 
 ### Fix Quality Checks
 
 Before presenting the plan, verify the proposed fix against anti-patterns:
 
 **Anti-Pattern Detection:**
-- **Symptom masking?** Does the fix add try/catch, retry, or default values without addressing WHY the bad state occurs? → REJECT.
-- **Band-aid fix?** Does the fix add a special case, guard clause, or configuration flag to work around the issue? → REJECT.
-- **Whack-a-mole?** Does the fix only prevent the specific manifestation reported, leaving the systemic issue intact? → REJECT.
-
-**Quality Signals:**
-- The fix removes or corrects a flawed assumption in the code
-- The fix strengthens or adds an invariant
-- The fix simplifies rather than adds complexity
-- Existing tests should continue to pass without modification (unless the tests encoded wrong behavior)
-- New tests can be written that would have caught this bug
+- **Symptom masking?** Does the fix add try/catch, retry, or default values without addressing WHY the bad state occurs? -> REJECT.
+- **Band-aid fix?** Does the fix add a special case, guard clause, or configuration flag to work around the issue? -> REJECT.
+- **Whack-a-mole?** Does the fix only prevent the specific manifestation reported, leaving the systemic issue intact? -> REJECT.
 
 ### User Review
 
@@ -483,7 +520,7 @@ Present the plan as plain text, then:
 
 ### Output
 
-Write `.planning/rca/PLAN.md`:
+Write `.rca/<slug>/REMEDIATION.md`:
 
 ```markdown
 # Remediation Plan
@@ -539,7 +576,20 @@ Write `.planning/rca/PLAN.md`:
 [What could prevent similar bugs in the future]
 ```
 
-Commit after approval: `git commit "docs(rca): remediation plan approved"`
+### Completion Review
+
+After the user approves the remediation plan:
+
+- **header:** "Investigation Complete"
+- **question:** "Keep or clean up the investigation artifacts in `.rca/<slug>/`?"
+- **options:**
+  - label: "Delete" / description: "Remove the investigation directory"
+  - label: "Archive" / description: "Create a tarball and remove the directory"
+  - label: "Keep" / description: "Leave the artifacts in place"
+
+**If "Delete":** `rm -rf .rca/<slug>/`
+**If "Archive":** `tar czf rca-<slug>.tar.gz -C .rca <slug> && rm -rf .rca/<slug>/`
+**If "Keep":** No action.
 
 ---
 
@@ -547,9 +597,9 @@ Commit after approval: `git commit "docs(rca): remediation plan approved"`
 
 - **Treat the disease, not the symptom.** Every fix must address a structural issue, not mask a behavior.
 - **Evidence before theory.** Gather facts before forming hypotheses. Premature theories cause tunnel vision.
-- **Multiple hypotheses prevent tunnel vision.** Always generate at least 3 explanations.
+- **Multiple hypotheses prevent tunnel vision.** Generate at least 2-3 competing explanations.
 - **The challenger is your friend.** Welcome challenges to your hypothesis — they either strengthen it or reveal the truth.
 - **Good root causes are structural.** "Someone made a typo" is not a root cause. "There's no validation at the boundary where this data enters" is.
 - **Good fixes are simple.** If the fix is complex, you might be fixing the wrong thing.
-- **Artifacts are the state.** Everything important is in `.planning/rca/`. If it's not in a file, it doesn't survive.
+- **Artifacts are the state.** Everything important is in `.rca/<slug>/`. If it's not in a file, it doesn't survive.
 - **Resist urgency.** The pressure to "just fix it" is the enemy of finding the real cause.

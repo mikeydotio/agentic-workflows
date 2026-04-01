@@ -10,7 +10,7 @@ Each phase writes a handoff document before instructing the user to `/clear`. Th
 
 ## File Naming
 
-`.planning/handoff-phase-N.md` where N is the phase number that just completed.
+`.planning/ideate/handoff-phase-N.md` where N is the phase number that just completed.
 
 ## Common Structure
 
@@ -95,7 +95,21 @@ I'll pick up right where we left off.
 ---
 ```
 
-Then STOP — do not proceed to the next phase.
+Then STOP — End your response immediately. Do not call any more tools or generate additional content. Your response ending is what triggers the Stop hook.
+
+## Phase Rollback
+
+If a user chooses "Start this phase over" (from the missing-handoff prompt or any other decision point), delete the artifacts for that phase to reset it. Commit after each phase makes rollback safe — earlier phases are already committed.
+
+| Rollback to... | Delete these files |
+|----------------|-------------------|
+| Phase 1 | All of `.planning/ideate/` |
+| Phase 2 | `.planning/ideate/research/`, `.planning/ideate/handoff-phase-1.md` |
+| Phase 3 | `.planning/ideate/DESIGN.md`, `.planning/ideate/handoff-phase-2.md` |
+| Phase 4 | `.planning/ideate/PLAN.md`, `.planning/ideate/handoff-phase-3.md` |
+| Pilot Invitation | `.planning/ideate/EXECUTION.md`, `.planning/ideate/handoff-phase-4.md` |
+
+After deleting, re-invoke `/ideate` — the resumption protocol picks up from the correct phase.
 
 ## Missing Handoff on Resumption
 
@@ -104,7 +118,7 @@ If the orchestrator resumes and the expected handoff file is missing:
 1. Do NOT silently continue with degraded context
 2. Use `AskUserQuestion`:
    - **header:** "Missing Handoff"
-   - **question:** "The handoff document from the previous phase is missing (`.planning/handoff-phase-N.md`). Without it, I'll be working with limited context about decisions and rationale from the prior phase. The artifacts themselves are intact."
+   - **question:** "The handoff document from the previous phase is missing (`.planning/ideate/handoff-phase-N.md`). Without it, I'll be working with limited context about decisions and rationale from the prior phase. The artifacts themselves are intact."
    - **options:**
      - "Continue anyway" / "Proceed using only the artifact files — I can fill in context if needed"
      - "Let me create it" / "I'll write the handoff document manually, then re-invoke"
