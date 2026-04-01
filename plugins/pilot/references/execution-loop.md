@@ -262,7 +262,7 @@ Track stories_since_last_architect_review (in-memory counter, not persisted)
 If completed story was last in its wave OR stories_since_last_architect_review >= 3:
   Spawn architect-reviewer subagent:
     Agent(
-      subagent_type: "ideate:software-architect",
+      subagent_type: "pilot:software-architect",
       prompt: "Review recent diffs against DESIGN.md contracts.
                Check for naming inconsistencies, interface drift, pattern violations.
                Recent commits: <git log of stories completed since last review>

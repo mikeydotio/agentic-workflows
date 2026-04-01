@@ -6,6 +6,8 @@ argument-hint: [idea description]
 
 # Ideate: From Spark to Ship
 
+> **DEPRECATED:** This plugin has been merged into the unified **pilot** plugin. Use `/pilot` instead. All ideate functionality (interrogation, research, design, planning, execution) is now available through pilot with additional review, validation, triage, documentation, and deployment steps. Artifacts now live in `.pilot/` instead of `.planning/ideate/`.
+
 You are an ideation orchestrator. Your job is to take a raw idea and forge it into a well-examined, thoroughly challenged, comprehensively planned, and expertly executed project. You do this through five phases, each building on the last.
 
 **Read these references before starting:**
@@ -21,14 +23,14 @@ You are an ideation orchestrator. Your job is to take a raw idea and forge it in
 4. **Research before designing.** Always check if the problem is already solved or if established patterns exist.
 5. **Right-size the team.** Not every project needs every agent. A CLI tool doesn't need a UX designer.
 6. **Document for resumption.** Every phase produces artifacts that allow work to be restarted from that point.
-7. **Clear context between phases.** After completing a phase, write a handoff document, commit, instruct the user to `/clear`, and STOP. Never proceed to the next phase inline.
+7. **Clear context between phases.** After completing a phase, write a handoff document, commit, instruct the user to `/clear`, and STOP. Never proceed to the next phase inline. Phase 5 waves are sub-phase steps — they proceed inline. Context clearing applies between phases (1→2→3→4), not between waves within Phase 5.
 
 ## Phase Transition Protocol
 
 Every phase ends the same way. After writing and committing the phase's artifacts:
 
-1. **Write handoff**: Write `.planning/handoff-phase-N.md` following the format in `references/phase-handoff.md`. Include key decisions, context the next phase needs, and open questions.
-2. **Commit**: `git add .planning/ && git commit -m "docs: complete phase N — [phase name]"`
+1. **Write handoff**: Write `.planning/ideate/handoff-phase-N.md` following the format in `references/phase-handoff.md`. Include key decisions, context the next phase needs, and open questions.
+2. **Commit**: `git add .planning/ideate/ && git commit -m "docs: complete phase N — [phase name]"`
 3. **Queue context clear**: Run via Bash:
    ```bash
    bash plugins/freshen/bin/freshen.sh queue "/ideate" --source ideate
@@ -45,7 +47,7 @@ Every phase ends the same way. After writing and committing the phase's artifact
    I'll pick up right where we left off.
    ---
    ```
-4. **STOP** — return from the skill. Do NOT proceed to the next phase inline. The freshen hooks will automatically clear context and re-invoke `/ideate`.
+4. **STOP** — End your response immediately. Do not call any more tools or generate additional content. Your response ending is what triggers the Stop hook. The freshen hooks will automatically clear context and re-invoke `/ideate`.
 
 ## Phase 1: The Interrogation
 
@@ -119,7 +121,7 @@ If not ready, ask what's missing via AskUserQuestion. Loop until they're ready.
 
 ### Output: IDEA.md
 
-Write `.planning/IDEA.md` capturing:
+Write `.planning/ideate/IDEA.md` capturing:
 
 ```markdown
 # [Project Name]
@@ -156,9 +158,7 @@ Write `.planning/IDEA.md` capturing:
 [Existing solutions found during research, how this differs]
 ```
 
-Commit immediately: `git commit "docs: capture idea — [project name]"`
-
-**Exit via Phase Transition Protocol** — write `handoff-phase-1.md` and stop.
+**Exit via Phase Transition Protocol** — write `.planning/ideate/handoff-phase-1.md` and stop. The protocol commit includes IDEA.md + handoff atomically.
 
 ---
 
@@ -171,16 +171,14 @@ Spawn `ideate:domain-researcher` agents (1-3, depending on breadth) to research:
 3. **Common pitfalls** — What do people typically get wrong?
 4. **Technology landscape** — What's the current best-of-breed stack for this?
 
-Each researcher writes findings to `.planning/research/`. After all complete, synthesize into `.planning/research/SUMMARY.md`.
+Each researcher writes findings to `.planning/ideate/research/`. After all complete, synthesize into `.planning/ideate/research/SUMMARY.md`.
 
 Present key findings to the user:
 - "Here's what I found. [Existing tool X] does [thing] — do you still want to build this, or would using/extending X be better?"
 - "The standard architecture for this is [pattern]. I recommend we follow it unless you have a reason not to."
 - "Common pitfall: [thing]. Our design should account for this."
 
-Commit: `git commit "docs: domain research complete"`
-
-**Exit via Phase Transition Protocol** — write `handoff-phase-2.md` and stop.
+**Exit via Phase Transition Protocol** — write `.planning/ideate/handoff-phase-2.md` and stop. The protocol commit includes research artifacts + handoff atomically.
 
 ---
 
@@ -217,9 +215,9 @@ For each section:
 
 If "Needs changes" — ask what to change via AskUserQuestion, revise, re-present.
 
-After user approves all sections, write `.planning/DESIGN.md` and commit: `git commit "docs: system design approved"`
+After user approves all sections, write `.planning/ideate/DESIGN.md`.
 
-**Exit via Phase Transition Protocol** — write `handoff-phase-3.md` and stop.
+**Exit via Phase Transition Protocol** — write `.planning/ideate/handoff-phase-3.md` and stop. The protocol commit includes DESIGN.md + handoff atomically.
 
 ---
 
@@ -233,7 +231,7 @@ Spawn the planning team:
 
 Each agent receives IDEA.md, research/SUMMARY.md, and DESIGN.md.
 
-The PM produces `.planning/PLAN.md`:
+The PM produces `.planning/ideate/PLAN.md`:
 
 ```markdown
 # Implementation Plan
@@ -266,9 +264,7 @@ Present the plan as plain text, then use AskUserQuestion:
 - **question:** "Does this implementation plan look right? Ready to execute?"
 - **options:** ["Approved — start building", "Needs adjustment", "I have concerns"]
 
-Commit after approval: `git commit "docs: implementation plan approved"`
-
-**Exit via Phase Transition Protocol** — write `handoff-phase-4.md` and stop.
+**Exit via Phase Transition Protocol** — write `.planning/ideate/handoff-phase-4.md` and stop. The protocol commit includes PLAN.md + handoff atomically.
 
 ---
 
@@ -281,7 +277,7 @@ This is not a numbered phase — it is the resumption path when PLAN.md exists w
 ### Entry
 
 1. Read `handoff-phase-4.md` (if missing, follow the missing-handoff protocol from `references/phase-handoff.md`)
-2. Read `.planning/PLAN.md`
+2. Read `.planning/ideate/PLAN.md`
 3. Output a brief summary of the completed plan: wave count, task count, key risks
 
 ### Execution Choice
@@ -301,7 +297,7 @@ If pilot is NOT installed, use AskUserQuestion:
 - **options:** ["Execute here (ideate Phase 5)", "Just the plan — I'll execute manually"]
 
 **If "Autonomous via pilot":**
-1. Invoke `/pilot plan` with `.planning/PLAN.md`
+1. Invoke `/pilot plan` with `.planning/ideate/PLAN.md`
 2. Report story count and dependency structure
 3. Use AskUserQuestion:
    - **header:** "Start?"
@@ -310,7 +306,16 @@ If pilot is NOT installed, use AskUserQuestion:
 4. If yes → invoke `/pilot run`
 5. Return — ideate is done (pilot takes over)
 
-**If "Execute here":** Proceed to Phase 5.
+**If "Execute here":**
+1. Write `.planning/ideate/EXECUTION.md` with:
+   ```markdown
+   # Execution Marker
+   ## Choice: Execute here (ideate Phase 5)
+   ## Started: [ISO 8601 timestamp]
+   ## Wave Progress
+   - Wave 1: pending
+   ```
+2. Proceed to Phase 5. Update wave progress in EXECUTION.md as each wave completes.
 
 **If "Just the plan":** Return — ideate is done.
 
@@ -343,7 +348,7 @@ Execute the plan in waves, spawning agents appropriate to each task:
 3. **`ideate:devils-advocate`** — Final review: does the implementation match the original idea? Any drift?
 4. **`ideate:project-manager`** — Final status report, requirement traceability (every requirement in IDEA.md maps to implemented code)
 
-Write `.planning/COMPLETION.md` with final status. Commit: `git commit "docs: implementation complete"`
+Write `.planning/ideate/COMPLETION.md` with final status. Commit: `git commit "docs: implementation complete"`
 
 ---
 
@@ -353,18 +358,20 @@ If ideate is interrupted at any phase, the artifacts on disk define the state. T
 
 | If you find... | Handoff to read | Resume from... |
 |----------------|-----------------|---------------|
-| Nothing in `.planning/` | None | Phase 1: The Interrogation |
-| `IDEA.md` only | `handoff-phase-1.md` | Phase 2: Domain Research |
-| `IDEA.md` + `research/` | `handoff-phase-2.md` | Phase 3: Design |
-| `IDEA.md` + `DESIGN.md` | `handoff-phase-3.md` | Phase 4: Planning |
-| `IDEA.md` + `DESIGN.md` + `PLAN.md` | `handoff-phase-4.md` | Pilot Invitation |
-| `COMPLETION.md` | None | Done |
+| Nothing in `.planning/ideate/` | None | Phase 1: The Interrogation |
+| `.planning/ideate/IDEA.md` only | `.planning/ideate/handoff-phase-1.md` | Phase 2: Domain Research |
+| `.planning/ideate/IDEA.md` + `.planning/ideate/research/SUMMARY.md` | `.planning/ideate/handoff-phase-2.md` | Phase 3: Design |
+| `.planning/ideate/IDEA.md` + `.planning/ideate/DESIGN.md` | `.planning/ideate/handoff-phase-3.md` | Phase 4: Planning |
+| `.planning/ideate/IDEA.md` + `.planning/ideate/DESIGN.md` + `.planning/ideate/PLAN.md` | `.planning/ideate/handoff-phase-4.md` | Pilot Invitation |
+| `.planning/ideate/EXECUTION.md` (without COMPLETION.md) | `.planning/ideate/EXECUTION.md` | Phase 5: resume from last completed wave |
+| `.planning/ideate/COMPLETION.md` | None | Done |
 
 ### Resumption Steps
 
-1. Scan `.planning/` to determine the current phase from the table above
-2. Read the corresponding handoff document (e.g., `handoff-phase-2.md` before starting Phase 3)
+1. Scan `.planning/ideate/` to determine the current phase from the table above (match bottom to top — the first match wins)
+2. Read the corresponding handoff document (e.g., `.planning/ideate/handoff-phase-2.md` before starting Phase 3)
    - **If the handoff is missing**: follow the missing-handoff protocol in `references/phase-handoff.md` — pause and ask the user how to proceed via `AskUserQuestion`. Do NOT silently continue.
+   - **Research validation**: If resuming to Phase 3 and `.planning/ideate/research/` exists but `SUMMARY.md` is missing or some researcher outputs are absent, identify the gap and re-spawn only the failed researchers before proceeding.
 3. Output a brief summary of prior phases drawn from the handoff (2-4 sentences)
 4. Read the relevant artifact files (IDEA.md, DESIGN.md, etc.)
 5. Continue with the next phase
@@ -376,7 +383,7 @@ If ideate is interrupted at any phase, the artifacts on disk define the state. T
 - **The interrogation is the foundation.** A weak interrogation produces a weak design. Take the time.
 - **Research prevents reinvention.** Always check before building from scratch.
 - **The right team for the job.** Don't spawn a UX designer for a cron job.
-- **Artifacts are the state.** Everything important is written to `.planning/`. If it's not in a file, it doesn't survive.
+- **Artifacts are the state.** Everything important is written to `.planning/ideate/`. If it's not in a file, it doesn't survive.
 - **Challenge at every phase.** The devil's advocate reviews design AND plan AND implementation.
 - **Atomic waves.** Each wave leaves the project in a consistent, testable state.
 - **Document decisions, not just code.** Future maintainers need to know why, not just what.

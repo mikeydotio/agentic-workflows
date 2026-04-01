@@ -31,6 +31,27 @@ You are the pilot orchestrator — a thin state-machine router that detects pipe
 9. **One question at a time** via `AskUserQuestion`. Every user question uses exactly 1 `AskUserQuestion` call.
 10. **Never proceed inline between steps.** Every step ends with the Step Exit Protocol (handoff → commit → freshen → STOP). Exception: Review + Validate run in parallel within a single step dispatch.
 
+## Legacy Migration Detection
+
+Before routing, check for legacy ideate artifacts:
+
+If `.planning/ideate/` exists with artifacts (IDEA.md, DESIGN.md, PLAN.md, etc.):
+1. Use AskUserQuestion:
+   - **header:** "Legacy Data"
+   - **question:** "Found legacy ideate artifacts in `.planning/ideate/`. These are from the deprecated ideate plugin. Would you like to migrate them to the unified pipeline?"
+   - **options:** ["Migrate to .pilot/", "Ignore — start fresh", "Keep both — I'll manage manually"]
+2. If "Migrate":
+   - Copy `.planning/ideate/IDEA.md` → `.pilot/IDEA.md`
+   - Copy `.planning/ideate/research/` → `.pilot/research/`
+   - Copy `.planning/ideate/DESIGN.md` → `.pilot/DESIGN.md`
+   - Copy `.planning/ideate/PLAN.md` → `.pilot/PLAN.md`
+   - Commit: `git add .pilot/ && git commit -m "pilot: migrate legacy ideate artifacts to .pilot/"`
+   - Resume with state detection on `.pilot/`
+3. If "Ignore" → proceed as normal (empty `.pilot/` → interrogate)
+4. If "Keep both" → proceed as normal, user manages legacy artifacts
+
+Only check this once — if `.pilot/` already has artifacts, skip the migration check.
+
 ## Command Router
 
 Parse the user's message to determine the subcommand. If the input is a bare idea description (no recognized subcommand), treat it as `/pilot interrogate <idea>`.

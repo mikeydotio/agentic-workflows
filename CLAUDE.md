@@ -17,18 +17,25 @@ Agentic Workflows is a Claude Code plugin marketplace (`mikeydotio/agentic-workf
 - `references/<topic>.md` — methodology docs and detailed protocols that skills reference (keeps SKILL.md lean)
 
 **Key design patterns**:
-- **Artifact-based resumption**: Both ideate and rca use `.planning/` artifacts to track phase state. Presence of specific files (IDEA.md, DESIGN.md, PLAN.md) determines resume point.
-- **Multi-agent orchestration**: One orchestrator skill spawns specialized agents at appropriate phases. Each agent has distinct tool access and perspective.
+- **Artifact-based resumption**: Plugins use namespaced artifact directories — pilot writes to `.pilot/`, rca to `.rca/<slug>/` (gitignored). Presence of specific files determines resume point.
+- **Multi-agent orchestration**: One orchestrator skill spawns specialized agents at appropriate steps. Each agent has distinct tool access and perspective.
 - **One question at a time**: All user interactions use `AskUserQuestion` with exactly one question per call.
+- **Step exit protocol**: Every orchestrated step writes artifacts, handoff, commits, and queues freshen for context clearing before the next step.
 
 ## Plugins
 
 | Plugin | Skill | Purpose |
 |--------|-------|---------|
-| ideate | `/ideate` | 5-phase pipeline: interrogation → research → design → planning → execution. 10 specialized agents. Phase 4.5 offers pilot handoff. |
+| pilot | `/pilot` | Unified idea-to-deployment pipeline: interrogation → research → design → planning → decompose → execute → review → validate → triage → document → deploy. 15 agents, 11 pipeline skills, state-machine orchestrator. FIX/ESCALATE triage loop. Has SessionStart and Stop hooks. |
 | rca | `/rca` | Root cause analysis: symptom intake → evidence collection → hypothesis formation → verification → remediation. 5 agents. |
 | semver | `/semver` | Version lifecycle: tracking, bumping, changelog generation, sync validation. Has SessionStart and PostToolUse hooks. |
-| pilot | `/pilot` | Autonomous execution harness: plan decomposition → generator-evaluator loop → auto-resume. 2 agents (generator, evaluator). Has SessionStart and Stop hooks. |
+| ideate | `/ideate` | **DEPRECATED** — merged into pilot. Use `/pilot` instead. |
+
+## Runtime Dependencies
+
+**tmux** is a hard requirement for the freshen plugin and all hook-based context-clearing flows (pilot step transitions). Without tmux, these flows fall back to manual `/clear` instructions.
+
+**Hook ordering**: When Claude Code's turn ends, tmux buffers keystrokes until the prompt accepts input. This means `/clear` sent by the Stop hook is not processed until all Stop hooks complete, so ordering between hooks is safe by design.
 
 ## When Adding a New Plugin
 

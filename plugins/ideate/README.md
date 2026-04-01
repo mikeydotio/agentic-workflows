@@ -1,5 +1,7 @@
 # ideate
 
+> **DEPRECATED:** The ideate plugin has been merged into the unified **pilot** plugin. Use `/pilot` instead of `/ideate`. The pilot plugin includes all ideate functionality (interrogation, research, design, planning) plus autonomous execution, review, validation, triage, documentation, and deployment. Artifacts now live in `.pilot/` instead of `.planning/ideate/`.
+
 Flesh out ideas through relentless questioning, then execute with a cross-functional agent team.
 
 ## What It Does
