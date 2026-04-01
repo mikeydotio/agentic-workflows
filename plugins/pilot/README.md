@@ -1,63 +1,85 @@
 # Pilot Plugin
 
-Autonomous execution harness for Claude Code. Decomposes implementation plans into storyhook stories, then executes them through a generator-evaluator loop with session persistence and auto-resume.
+Unified idea-to-deployment pipeline for Claude Code. Takes a raw idea through interrogation, research, design, planning, autonomous execution, review, validation, triage, documentation, and deployment — with freshen-based context clearing between every step.
 
 ## Overview
 
-Work replaces manual execution with a fire-and-forget workflow:
+Pilot replaces the separate ideate and pilot plugins with a single unified pipeline:
 
-1. **Plan** → Decompose a PLAN.md into storyhook stories with dependencies
-2. **Run** → Generator writes code, evaluator verifies, stories advance through states
-3. **Resume** → Sessions end naturally; crontab triggers restart automatically
-4. **Complete** → All stories done, tests pass, completion artifact written
+```
+Interrogate -> Research -> Design -> Plan -> Decompose -> Execute
+                                                            |
+                                                 Review || Validate (parallel)
+                                                            |
+                                                         Triage
+                                                            |
+                                              FIX items? -> Plan (loop, max 3 / 10 yolo)
+                                              No FIX    -> Document
+                                                            |
+                                                         PAUSE (always)
+                                                            |
+                                              ESCALATE? -> User reviews -> Plan
+                                              None      -> Deploy (with permission)
+```
 
 ## Commands
 
 | Command | Purpose |
 |---------|---------|
-| `/pilot init` | Validate storyhook, add required states |
-| `/pilot plan [file]` | Decompose PLAN.md into stories |
-| `/pilot run [--interval 15m] [--dry-run]` | Start autonomous execution |
-| `/pilot resume` | Resume after session boundary |
-| `/pilot status` | Dashboard: stories, retries, blockers |
+| `/pilot` | Detect state and continue pipeline |
+| `/pilot continue` | Same as above |
+| `/pilot <step>` | Invoke a specific step standalone |
+| `/pilot status` | Pipeline dashboard |
 | `/pilot stop` | Graceful stop with handoff |
-| `/pilot ideate` | Invoke ideate with pilot-aware hints |
+| `/pilot --yolo` | FIX everything, never ESCALATE |
+
+## Pipeline Steps (11)
+
+| # | Step | Input | Output |
+|---|------|-------|--------|
+| 1 | Interrogate | User's idea | `IDEA.md` |
+| 2 | Research | `IDEA.md` | `research/SUMMARY.md` + `TEAM.md` |
+| 3 | Design | `IDEA.md`, research | `DESIGN.md` |
+| 4 | Plan | `IDEA.md`, `DESIGN.md` | `PLAN.md` |
+| 5 | Decompose | `PLAN.md`, `DESIGN.md` | stories + `plan-mapping.json` |
+| 6 | Execute | stories, mapping | Implemented code |
+| 7 | Review | code, `DESIGN.md` | `REVIEW-REPORT.md` |
+| 8 | Validate | code, `PLAN.md` | `VALIDATE-REPORT.md` |
+| 9 | Triage | reports | `TRIAGE.md` |
+| 10 | Document | all artifacts | `DOCUMENTATION.md` |
+| 11 | Deploy | approval | `COMPLETION.md` |
 
 ## Architecture
 
-```
-User → /ideate → PLAN.md → /pilot plan → Stories → /pilot run
-                                                              │
-                                          Generator ←→ Evaluator (loop)
-                                                              │
-                                              pass → commit → next story
-                                              fail → retry or block
-                                                              │
-                                          Session ends → auto-resume → continue
-```
+### State Machine Router
 
-### Generator-Evaluator Pattern
+The orchestrator detects pipeline state from artifacts on disk and dispatches to the correct step. No conversation state is needed — everything is derived from `.pilot/` contents.
 
-- **Generator**: Implements one story at a time (has Write/Edit tools)
-- **Evaluator**: Verifies implementation (read-only, skeptical, debiased)
-- **Deterministic pre-checks**: Tests, linter, stub grep run before evaluator
-- **Isolated subagents**: Fresh context per story, no cross-contamination
+### Step Exit Protocol
 
-### State Management
+Every step follows the same pattern:
+1. Write artifacts to `.pilot/`
+2. Write handoff to `.pilot/handoffs/handoff-<step>.md`
+3. Commit
+4. Queue freshen (`/clear` + `/pilot continue`)
+5. STOP
 
-| File | Tracked | Purpose |
-|------|---------|---------|
-| `config.json` | Yes | User limits (max_retries, session limits) |
-| `plan-mapping.json` | Yes | Story-to-task mapping |
-| `state.json` | No | Runtime state (counters, status) |
-| `lock.json` | No | Session lock with heartbeat |
-| `handoff.md` | No | Human-readable session narrative |
-| `verdicts.jsonl` | No | Evaluator verdict history |
+### Agent Roster (15 agents)
 
-### Safety Features
+12 migrated from ideate + pilot, 3 new:
+- **reviewer** — static gap/defect analysis
+- **validator** — test hardening
+- **triager** — FIX/ESCALATE deliberation
 
-- **Canary mode**: First N stories require user approval
-- **Runaway safeguards**: Max sessions and max total retries
-- **Session locking**: Heartbeat-based, prevents duplicate work
-- **Integrity checks**: Post-generator and post-evaluator verification
-- **Architectural drift detection**: Periodic architect review
+### FIX/ESCALATE Loop
+
+After execution, Review + Validate run in parallel. Triage deliberates on findings:
+- **FIX**: auto-fix via Plan -> Decompose -> Execute -> Review -> Validate -> Triage (max 3 cycles, 10 in yolo mode)
+- **ESCALATE**: user reviews context and recommendations for each item
+
+### Safety
+
+- Canary mode: first N stories require user approval
+- Runaway safeguards: max sessions, max retries, max fix cycles
+- Deploy: never without explicit user permission
+- Always pauses after Document step for user review

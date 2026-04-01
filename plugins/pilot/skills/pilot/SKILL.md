@@ -1,410 +1,336 @@
 ---
 name: pilot
-description: Autonomous execution harness — decomposes plans into stories, runs generator-evaluator loops, manages sessions with auto-resume, and orchestrates fire-and-forget workflows. Use when the user wants to execute a plan autonomously or manage autonomous execution.
-argument-hint: init | plan [file] | run [--interval 15m] [--dry-run] | resume | status | stop | ideate
+description: Unified idea-to-deployment pipeline — interrogation, research, design, planning, autonomous execution, review, validation, triage, documentation, and deployment. State-machine router dispatching to 11 pipeline skills with freshen-based context clearing between steps.
+argument-hint: continue | interrogate | research | design | plan | decompose | execute | review | validate | triage | document | deploy | status | stop | [idea description]
 ---
 
-# Work: Autonomous Execution Harness
+# Pilot: Unified Pipeline
 
-You are the pilot orchestrator. You decompose implementation plans into stories, then execute them autonomously through a generator-evaluator loop with session persistence, auto-resume, and clean handoffs.
+You are the pilot orchestrator — a thin state-machine router that detects pipeline state from artifacts, loads the appropriate skill, and dispatches. Each pipeline step is a separate skill that reads its inputs from `.pilot/`, writes its outputs, and exits.
 
-**Read these references on demand (not all at once — load what the subcommand needs):**
+**Core references (load on demand, not all at once):**
+- `references/step-handoff.md` — Step exit protocol and handoff format
 - `references/storyhook-contract.md` — Story CLI command mapping
-- `references/story-decomposition.md` — Plan → story decomposition
-- `references/execution-loop.md` — Full autonomous loop logic
-- `references/verification-protocol.md` — Evaluator criteria and debiasing
-- `references/deterministic-checks.md` — Pre-checks before evaluator
-- `references/canary-mode.md` — Supervised first-N-stories
-- `references/handoff-format.md` — Handoff artifact spec
-- `references/recovery-protocol.md` — Resume/recovery sequence
+- `references/execution-loop.md` — Autonomous execution loop
 - `references/session-locking.md` — Lock protocol
-- `references/auto-resume.md` — Crontab/systemd timer setup
+- `references/recovery-protocol.md` — Resume/recovery sequence
+- `references/auto-resume.md` — Freshen-based auto-resume
+- `references/questioning.md` — Interrogation questioning methodology
+- `references/team-roles.md` — Agent team roles and spawning philosophy
 
 ## Hard Rules
 
 1. **Storyhook is authoritative** for story-level state. Never duplicate story state in pilot files.
 2. **One story at a time** through the generator-evaluator loop. No parallel story execution.
-3. **Generator does NOT commit**. Commits happen only after evaluation passes.
-4. **Evaluator has NO Write/Edit tools**. It judges, never fixes. Enforce via agent tool restriction AND post-evaluator `git diff` check.
-5. **Clean working tree** before each generator spawn: `git checkout .` to discard previous attempts.
-6. **State files re-read every iteration** from disk. Never rely on in-memory state across loop iterations.
+3. **Generator does NOT commit.** Commits happen only after evaluation passes.
+4. **Evaluator has NO Write/Edit tools.** It judges, never fixes.
+5. **Clean working tree** before each generator spawn: `git checkout .`
+6. **State files re-read every iteration** from disk. Never rely on in-memory state.
 7. **Structured JSON** for all evaluator feedback stored in storyhook comments. Never raw freeform text.
 8. **`jq` for JSON construction** in all shell scripts. Never `printf` with string escaping.
+9. **One question at a time** via `AskUserQuestion`. Every user question uses exactly 1 `AskUserQuestion` call.
+10. **Never proceed inline between steps.** Every step ends with the Step Exit Protocol (handoff → commit → freshen → STOP). Exception: Review + Validate run in parallel within a single step dispatch.
 
 ## Command Router
 
-Parse the user's message to determine the subcommand. Extract arguments (e.g., `--interval 15m`, `--dry-run`) from the message text. If a required argument is ambiguous or missing, use `AskUserQuestion` to prompt.
+Parse the user's message to determine the subcommand. If the input is a bare idea description (no recognized subcommand), treat it as `/pilot interrogate <idea>`.
+
+### Recognized Commands
+
+| Command | Action |
+|---------|--------|
+| `/pilot` (no args) | Same as `continue` |
+| `/pilot continue` | Detect state from artifacts, dispatch to next step |
+| `/pilot <step>` | Direct invocation of a step (standalone mode) |
+| `/pilot <step> --orchestrated` | Step invoked by orchestrator (uses step exit protocol) |
+| `/pilot status` | Show pipeline dashboard |
+| `/pilot stop` | Graceful stop — write handoff, release lock, cancel freshen |
+| `/pilot --yolo` | Set yolo mode in config, then continue |
+
+### Flags
+
+- `--yolo` — FIX everything during triage, never ESCALATE, skip deliberation, 10 max fix cycles
+- `--orchestrated` — Internal flag passed when dispatching to skills. Skills use this to decide exit behavior (step exit protocol vs. clean return to user).
 
 ---
 
-### `/pilot init`
-
-**Purpose**: Validate storyhook availability and add required states.
-
-**Read**: `references/storyhook-contract.md`
-
-**Steps**:
-
-1. **Check storyhook availability**: Run `story list` and verify it succeeds
-   - If storyhook not available → error: "Storyhook is not initialized. Run `story new` first to set up storyhook."
-
-2. **Add pilot states** idempotently to `.storyhook/states.toml`:
-   - Read the current `states.toml`
-   - For each required state (`in-progress`, `verifying`, `blocked`), check if it already exists
-   - If missing, append the state definition:
-     ```toml
-     [in-progress]
-     super = "open"
-     description = "Generator working on this story"
-
-     [verifying]
-     super = "open"
-     description = "Evaluator reviewing this story"
-
-     [blocked]
-     super = "open"
-     description = "Dependency unmet, decision needed, or max retries exhausted"
-     ```
-   - Existing states are never modified — only missing ones are added
-
-3. **Validate**: Test that custom states work by checking `story next --help` for `--json` flag availability. Document result.
-
-4. **Create `.pilot/` directory** if it doesn't exist
-
-5. Report: "Work initialized. States: todo, in-progress, verifying, blocked, done."
-
----
-
-### `/pilot plan [file]`
-
-**Purpose**: Decompose PLAN.md into storyhook stories with dependencies and priorities.
-
-**Read**: `references/story-decomposition.md`, `references/storyhook-contract.md`
-
-**Args**:
-- `file` — Path to PLAN.md (default: `.planning/PLAN.md`)
-
-**Steps**:
-
-1. **Read prerequisites**:
-   - Read the PLAN.md file (error if not found)
-   - Read `.planning/DESIGN.md` (error if not found)
-
-2. **Idempotency check**: If `.pilot/plan-mapping.json` exists:
-   - Compute MD5 hash of PLAN.md content
-   - Compare against `plan_hash` in existing mapping
-   - Use AskUserQuestion:
-     - **header**: "Existing Plan Mapping"
-     - **question**: Hash match/mismatch message + "How would you like to proceed?"
-     - **options**: ["Continue with existing mapping", "Recreate stories (destructive)", "Cancel"]
-   - If "Continue" → skip decomposition, report existing mapping
-   - If "Recreate" → proceed with fresh decomposition
-   - If "Cancel" → exit
-
-3. **Ensure pilot states exist** (same as `/pilot init` state check)
-
-4. **Parse PLAN.md**: Extract waves and tasks:
-   - Each `### Wave N` section contains tasks
-   - Each task has: title, acceptance criteria, expected files
-   - Error if no waves found or waves are empty
-
-5. **Create stories sequentially**:
-   ```
-   For each wave:
-     For each task in wave:
-       story new "<task title>"
-       → record returned story ID
-       story HP-X priority <level>  (wave 1=high, 2=medium, 3+=low)
-       story HP-X "Acceptance: <criteria>"
-   ```
-
-6. **Set wave dependencies**:
-   ```
-   For each task T in wave N:
-     For each task U in wave N+1:
-       story HP-T precedes HP-U
-   ```
-
-7. **Create parent story**: `story new "[Project Name] — Work Execution"`
-
-8. **Map stories to DESIGN.md sections**: For each story, find the relevant DESIGN.md section by matching task descriptions. Embed the section content (not just headers) in plan-mapping.json.
-
-9. **Write `.pilot/plan-mapping.json`**:
-   ```json
-   {
-     "plan_hash": "<md5 of PLAN.md>",
-     "project_story": "HP-1",
-     "stories": {
-       "HP-2": {
-         "task_ref": "Task 1.1",
-         "wave": 1,
-         "title": "...",
-         "acceptance_criteria": "...",
-         "design_section": "...",
-         "files_expected": ["..."]
-       }
-     }
-   }
-   ```
-
-10. **Validate DAG**: Run `story graph` and check for cycles
-    - If cycles detected → report cycle path(s) and abort
-    - If DAG valid → report story count and structure
-
----
-
-### `/pilot run [--interval 15m] [--dry-run [--dry-run-mode all-pass|all-fail|mixed]]`
-
-**Purpose**: Acquire lock, set up auto-resume trigger, enter autonomous execution loop.
-
-**Read**: `references/execution-loop.md`, `references/session-locking.md`, `references/auto-resume.md`, `references/deterministic-checks.md`, `references/verification-protocol.md`, `references/canary-mode.md`
-
-**Args**:
-- `--interval <duration>` — Auto-resume interval (default: 15m)
-- `--dry-run` — Replace subagent spawns with canned responses (no API credits)
-- `--dry-run-mode <mode>` — all-pass (default), all-fail, or mixed
-
-**Steps**:
-
-1. **Pre-checks**:
-   - Verify `.pilot/plan-mapping.json` exists (run `/pilot plan` first if not)
-   - Verify storyhook has stories in `todo` state
-   - Read or create `.pilot/config.json` with defaults:
-     ```json
-     {
-       "max_retries": 4,
-       "max_stories_per_session": 1,
-       "max_sessions": 50,
-       "max_total_retries": 20,
-       "canary_stories": 3,
-       "trigger_interval": "15m",
-       "heartbeat_window_minutes": 30
-     }
-     ```
-   - Update `trigger_interval` if `--interval` provided
-
-2. **Acquire lock** (see `references/session-locking.md`):
-   - If lock exists with fresh heartbeat → exit: "Work is already running in another session"
-   - If lock exists with stale heartbeat → break lock, log warning
-   - Create new lock with current session ID
-
-3. **Initialize state** (create or update `.pilot/state.json`):
-   ```json
-   {
-     "version": 1,
-     "project_story": "<from plan-mapping>",
-     "plan_file": ".planning/PLAN.md",
-     "status": "running",
-     "trigger_name": "pilot-resume",
-     "retry_counts": {},
-     "canary_remaining": <from config>,
-     "stories_this_session": 0,
-     "stories_attempted": <preserved if exists>,
-     "total_retries": <preserved if exists>,
-     "sessions_completed": <preserved if exists>,
-     "storyhook_consecutive_failures": 0,
-     "started_at": "<now>",
-     "updated_at": "<now>"
-   }
-   ```
-
-4. **Set up auto-resume trigger** (see `references/auto-resume.md`):
-   - Parse interval to cron schedule
-   - Validate: test `claude -p "/pilot resume" --project <path>` from non-interactive shell
-   - If validation passes → install crontab entry
-   - If validation fails → log warning, continue without auto-resume
-
-5. **Enter execution loop** — follow `references/execution-loop.md` completely
-
----
-
-### `/pilot resume`
-
-**Purpose**: Check lock, recover context, continue execution loop.
-
-**Read**: `references/recovery-protocol.md`, `references/session-locking.md`, `references/execution-loop.md`
-
-**Steps** (follow `references/recovery-protocol.md`):
-
-1. **Lock check**:
-   - If heartbeat fresh → exit: "Work is already running in another session"
-   - If lock stale → break and acquire
-   - If no lock → acquire
-
-2. **Read state.json**:
-   - If missing or malformed → error, exit
-   - If `status` is `complete` → remove trigger if present, exit
-
-3. **Read handoff.md** (primary context source): Extract patterns established, micro-decisions, code landmarks, test state, blockers, and why the previous session stopped. If handoff.md is missing, pause and ask the user what to do via `AskUserQuestion` (see `references/handoff-format.md` for the missing-handoff protocol). Do NOT silently continue with degraded context.
-
-4. **Crash recovery**:
-   - Query storyhook for stories in `in-progress` or `verifying` → reset to `todo`
-   - Clean working tree: `git checkout .`
-
-5. **Determine next action**:
-   - `story next --json` → if stories available → enter execution loop
-   - All done → transition to complete
-   - All blocked → pause with message
-
-6. **Context gathering**: `git log --oneline -10`, run test suite
-
-7. **Update state**: `status: "running"`, `updated_at: now`, increment `sessions_completed`
-
-8. **Enter execution loop**
-
----
-
-### `/pilot status`
-
-**Purpose**: Dashboard showing progress, blockers, and health.
-
-**Steps**:
-
-1. **Read state files**: `.pilot/state.json`, `.pilot/config.json`
-
-2. **Query storyhook**: `story list --json` to get stories by state
-
-3. **Read verdicts**: Last 3 entries from `.pilot/verdicts.jsonl`
-
-4. **Check trigger**: Verify crontab entry exists (`crontab -l | grep pilot-resume`)
-
-5. **Display dashboard**:
-   ```
-   ## Work Status
-
-   **Status**: running | paused | complete
-   **Session**: #<sessions_completed + 1>
-   **Started**: <started_at>
-
-   ### Stories
-   | State | Count | Stories |
-   |-------|-------|---------|
-   | done | 5 | HP-2, HP-3, HP-5, HP-6, HP-8 |
-   | in-progress | 1 | HP-9 |
-   | todo | 3 | HP-10, HP-11, HP-12 |
-   | blocked | 1 | HP-7 (max_retries: failed 4 attempts) |
-
-   ### Resource Counters
-   - Sessions completed: 2 / 10 max
-   - Stories attempted: 7
-   - Total retries: 3 / 20 max
-
-   ### Blocked Stories
-   - HP-7: [blocked reason and last evaluator feedback]
-
-   ### Recent Verdicts
-   - HP-8: pass (attempt 1) — 2026-03-28T15:10:00Z
-   - HP-6: pass (attempt 2) — 2026-03-28T14:50:00Z
-   - HP-5: fail → pass (attempt 1→2) — 2026-03-28T14:35:00Z
-
-   ### Auto-Resume
-   - Trigger: active (crontab, every 15m)
-   - Next fire: ~<estimated>
-   ```
-
----
-
-### `/pilot stop`
-
-**Purpose**: Graceful stop — write handoff, release lock, remove trigger.
-
-**Read**: `references/handoff-format.md`, `references/session-locking.md`, `references/auto-resume.md`
-
-**Steps**:
-
-1. **Write handoff**: Generate `.pilot/handoff.md` following `references/handoff-format.md`
-   - Include working context summary (patterns, conventions, micro-decisions, gotchas)
-   - Include what's next and any blockers
-
-2. **Update state**: Set `status: "paused"` in state.json
-
-3. **Release lock**: Delete `.pilot/lock.json`
-
-4. **Remove auto-resume trigger**:
-   - Remove crontab entry: `crontab -l | grep -v '# pilot-resume' | crontab -`
-   - Or disable systemd timer if applicable
-
-5. Report: "Work stopped. Handoff written. Auto-resume trigger removed."
-
----
-
-### `/pilot ideate`
-
-**Purpose**: Convenience alias that invokes `/ideate` with pilot-aware hints.
-
-**Steps**:
-
-1. **Check pilot plugin is installed** (this is it — we're running from it)
-
-2. **Invoke `/ideate`** with additional context hints:
-   - Acceptance criteria must be **machine-evaluable** (the evaluator agent needs concrete, testable criteria — not subjective ones)
-   - Task sizing: each story should be completable in one generator agent session
-   - Wave structure should reflect true dependencies
-
-3. After ideate completes Phase 4 (PLAN.md approved), automatically offer `/pilot plan`
-
----
-
-## Execution Loop
-
-The execution loop is the core of pilot. It is defined in full detail in `references/execution-loop.md`. Here is the high-level flow:
+## State Detection (`continue`)
+
+On every `continue` invocation:
+
+1. Read most recent handoff from `.pilot/handoffs/` (if any exist)
+2. Scan `.pilot/` artifacts using the table below (bottom-up scan, **first match wins**)
+3. Read the SKILL.md for the detected next step
+4. Dispatch to that step with `--orchestrated`
+
+### Artifact Scan Table
+
+| Artifacts Found | Next State | Dispatch To |
+|----------------|------------|-------------|
+| `COMPLETION.md` | complete | Done — report completion |
+| `DEPLOY-APPROVAL.md` | deploy | `deploy --orchestrated` |
+| `DOCUMENTATION.md` + no ESCALATE stories pending | pause | Prompt user for deploy permission |
+| `DOCUMENTATION.md` + ESCALATE stories pending | pause | ESCALATE review loop (see below) |
+| `TRIAGE.md` with FIX items + fix cycle < max | fix_loop | `plan --orchestrated` (fix cycle) |
+| `TRIAGE.md` with no FIX items | document | `document --orchestrated` |
+| `REVIEW-REPORT.md` + `VALIDATE-REPORT.md` | triage | `triage --orchestrated` |
+| All stories done (query storyhook) | review_validate | `review --orchestrated` + `validate --orchestrated` (parallel) |
+| `plan-mapping.json` + stories not all done | execute | `execute --orchestrated` |
+| `PLAN.md` + no `plan-mapping.json` | decompose | `decompose --orchestrated` |
+| `DESIGN.md` + no `PLAN.md` | plan | `plan --orchestrated` |
+| `research/SUMMARY.md` + no `DESIGN.md` | design | `design --orchestrated` |
+| `IDEA.md` + no `research/SUMMARY.md` | research | `research --orchestrated` |
+| Nothing in `.pilot/` | interrogate | `interrogate --orchestrated` |
+
+### State Detection Implementation
 
 ```
-loop:
-  0. Storyhook health check (3 consecutive failures → pause)
-  0a. Runaway safeguard check (max_sessions, max_total_retries)
-  1. Pick next story (story next --json)
-  2. Load just-in-time context (criteria, design section)
-  3. Generate (spawn generator subagent, isolated)
-  3a. Post-generator integrity check (checksum .pilot/ files)
-  4. Deterministic pre-checks (tests, linter, stub grep)
-  4a. Generator scope check (unexpected files warning)
-  5. Evaluate (spawn evaluator subagent, read-only, skeptical)
-  5a. Post-evaluator integrity check (git diff — evaluator modified 0 files?)
-  5b. Log verdict to verdicts.jsonl
-  6. Canary check (first N stories require user approval)
-  7. State management (update counters, check max_stories_per_session)
-  8. Architectural drift check (every 3 stories or wave boundary)
-  9. Re-calibration prompt (every 10 stories)
-  retry: git checkout ., structured feedback, retry or block
-  pause: write handoff (MUST include cold-start essentials), set paused, release lock,
-         queue freshen: `bash plugins/freshen/bin/freshen.sh queue "/pilot resume" --source pilot`
-         (falls back to crontab auto-resume if freshen/tmux unavailable)
-  complete: full test suite, storyhook report, COMPLETION.md, remove trigger
+Read .pilot/ directory listing
+
+# Bottom-up scan (first match wins):
+if exists .pilot/COMPLETION.md → state = complete
+elif exists .pilot/DEPLOY-APPROVAL.md → state = deploy
+elif exists .pilot/DOCUMENTATION.md:
+  check storyhook for ESCALATE stories → if pending: pause_escalate, else: pause_deploy
+elif exists .pilot/TRIAGE.md:
+  read TRIAGE.md for FIX items
+  read .pilot/config.json for max_fix_cycles (or max_fix_cycles_yolo if yolo)
+  read current fix cycle count from .pilot/fix-cycles/
+  if FIX items AND cycle < max → state = fix_loop
+  elif no FIX items → state = document
+elif exists .pilot/REVIEW-REPORT.md AND exists .pilot/VALIDATE-REPORT.md → state = triage
+elif storyhook stories exist AND all done → state = review_validate
+elif exists .pilot/plan-mapping.json AND storyhook has non-done stories → state = execute
+elif exists .pilot/PLAN.md AND not exists .pilot/plan-mapping.json → state = decompose
+elif exists .pilot/DESIGN.md AND not exists .pilot/PLAN.md → state = design
+elif exists .pilot/research/SUMMARY.md AND not exists .pilot/DESIGN.md → state = design
+elif exists .pilot/IDEA.md AND not exists .pilot/research/SUMMARY.md → state = research
+else → state = interrogate
 ```
 
-Each step has detailed logic in `references/execution-loop.md`. **You MUST read that reference before entering the loop.** Do not implement the loop from this summary alone.
+### Fix Loop Handling
 
-## Dry-Run Mode
+When entering a fix loop:
+1. Archive current cycle: move `TRIAGE.md`, `PLAN.md`, `plan-mapping.json` to `.pilot/fix-cycles/cycle-N/`
+2. Increment fix cycle counter
+3. Dispatch to `plan --orchestrated` with the FIX items as input
 
-When `--dry-run` is specified, the loop replaces subagent spawns with canned responses:
+### ESCALATE Review Loop (Post-Document Pause)
 
-- **all-pass**: Every generator returns `{status: "complete"}`, every evaluator returns `{verdict: "pass"}`
-- **all-fail**: Every generator returns `{status: "complete"}`, every evaluator returns `{verdict: "fail"}` (tests retry logic)
-- **mixed**: Odd-numbered stories pass first attempt. Even-numbered stories fail twice then pass.
+When ESCALATE stories are pending after Document:
+1. Summarize pipeline results and any deviations from the happy path
+2. List FIX stories that were resolved and any FIX→ESCALATE promotions
+3. For each ESCALATE story, use `AskUserQuestion` to present:
+   - The finding description
+   - All solution options with pros/cons (from the triage report)
+   - Ask user to choose an approach
+4. After all ESCALATE stories are reviewed → dispatch to `plan --orchestrated` with user decisions
 
-Dry-run exercises full loop logic (state transitions, retry counting, commit gating, handoff writing) without API credits. No actual code is written or committed.
+### Deploy Permission Gate
 
-## State Files
+When no ESCALATE stories remain after Document:
+1. Present pipeline summary
+2. Use `AskUserQuestion`:
+   - **header:** "Deploy?"
+   - **question:** "Pipeline complete. Ready to deploy?"
+   - **options:** ["Deploy now", "Not yet — let me review first", "Done — no deployment needed"]
+3. If "Deploy now" → write `.pilot/DEPLOY-APPROVAL.md`, dispatch to `deploy --orchestrated`
+4. If "Not yet" → exit cleanly, user re-invokes when ready
+5. If "Done" → write `.pilot/COMPLETION.md`, report completion
 
-| File | Tracked? | Purpose |
-|------|----------|---------|
-| `.pilot/config.json` | Yes | User-set limits (max_retries, etc.) |
-| `.pilot/plan-mapping.json` | Yes | Story ID → task mapping with design context |
-| `.pilot/state.json` | No | Runtime state (status, counters, timestamps) |
-| `.pilot/lock.json` | No | Session lock with heartbeat |
-| `.pilot/handoff.md` | No | Human-readable session narrative |
-| `.pilot/verdicts.jsonl` | No | Evaluator verdict history |
+---
 
-## Completion Sequence
+## Direct Invocation (Standalone Mode)
 
-Triggered when all stories reach `done`:
+Any skill can be invoked directly: `/pilot <step> [args]`
 
-1. Run full test suite
-   - If fails → set `status: "paused"`, `pause_reason: "final-test-suite-failed"`, do NOT remove trigger
-   - Log: "Final test suite failed — manual review required"
-2. Generate storyhook report: `story summary` + `story handoff`
-3. Write `.planning/COMPLETION.md` (follows ideate convention)
-4. Remove auto-resume trigger
-5. Set `status: "complete"`
-6. Release lock
+In standalone mode (no `--orchestrated` flag):
+- Skill reads inputs from `.pilot/`
+- Skill writes outputs to `.pilot/`
+- Skill exits cleanly to the user (no freshen, no step exit protocol)
+- User decides what to do next
+
+---
+
+## Step Exit Protocol
+
+**Read**: `references/step-handoff.md`
+
+Every orchestrated step follows the same exit pattern:
+
+1. Write output artifacts to `.pilot/`
+2. Write handoff: `.pilot/handoffs/handoff-<step>.md` with full context for next step
+3. Commit: `git add .pilot/ && git commit -m "pilot(<step>): <summary>"`
+4. Queue freshen: `bash plugins/freshen/bin/freshen.sh queue "/pilot continue" --source pilot`
+   - If freshen fails (no tmux), fall back to manual instructions
+5. **STOP** — end response immediately. Do not proceed inline.
+
+---
+
+## `/pilot status`
+
+Show pipeline dashboard:
+
+1. Read `.pilot/` artifact listing to determine current step
+2. Read `.pilot/config.json` for settings
+3. If execution phase: read `.pilot/state.json` for runtime counters, query storyhook for story states
+4. List recent handoffs from `.pilot/handoffs/`
+
+Display:
+```
+## Pilot Pipeline Status
+
+**Current step**: [detected step]
+**Mode**: [normal | yolo]
+
+### Artifacts
+- IDEA.md: [exists/missing]
+- research/SUMMARY.md: [exists/missing]
+- DESIGN.md: [exists/missing]
+- PLAN.md: [exists/missing]
+- plan-mapping.json: [exists/missing]
+- [etc.]
+
+### Execution Progress (if in execute/review/validate/triage)
+[Story counts by state, retry counters, session count]
+
+### Fix Cycles
+[Current cycle N / max, history of prior cycles]
+
+### Recent Handoffs
+[Last 3 handoff filenames with timestamps]
+```
+
+---
+
+## `/pilot stop`
+
+Graceful stop:
+
+1. If execution phase is active:
+   - Write handoff following `references/handoff-format.md`
+   - Update `.pilot/state.json`: set `status: "paused"`
+   - Release lock: delete `.pilot/lock.json`
+2. Cancel pending freshen signal: `bash plugins/freshen/bin/freshen.sh cancel --source pilot`
+3. Report: "Pipeline stopped. Run `/pilot continue` to resume."
+
+---
+
+## Settings
+
+`.pilot/config.json` (created with defaults on first run):
+
+```json
+{
+  "yolo": false,
+  "max_fix_cycles": 3,
+  "max_fix_cycles_yolo": 10,
+  "when_in_doubt": "escalate",
+  "max_retries": 4,
+  "max_stories_per_session": 1,
+  "max_sessions": 200,
+  "max_total_retries": 20,
+  "canary_stories": 3,
+  "heartbeat_window_minutes": 30
+}
+```
+
+`--yolo` overrides at runtime (sets `yolo: true` in config for the session).
+
+---
+
+## Pipeline Skills
+
+Each skill is a separate SKILL.md under `skills/<step>/`. The orchestrator dispatches by reading the skill file and following its instructions.
+
+| # | Skill | Input | Output |
+|---|-------|-------|--------|
+| 1 | `interrogate` | User's idea | `.pilot/IDEA.md` |
+| 2 | `research` | `IDEA.md` | `.pilot/research/SUMMARY.md` + `.pilot/TEAM.md` |
+| 3 | `design` | `IDEA.md`, `research/SUMMARY.md`, `TEAM.md` | `.pilot/DESIGN.md` |
+| 4 | `plan` | `IDEA.md`, `DESIGN.md` | `.pilot/PLAN.md` |
+| 5 | `decompose` | `PLAN.md`, `DESIGN.md` | stories + `.pilot/plan-mapping.json` |
+| 6 | `execute` | `plan-mapping.json`, stories | Implemented code |
+| 7 | `review` | Implemented code, `DESIGN.md` | `.pilot/REVIEW-REPORT.md` |
+| 8 | `validate` | Implemented code, `PLAN.md` | `.pilot/VALIDATE-REPORT.md` |
+| 9 | `triage` | `REVIEW-REPORT.md`, `VALIDATE-REPORT.md` | `.pilot/TRIAGE.md` |
+| 10 | `document` | All artifacts, implemented code | `.pilot/DOCUMENTATION.md` |
+| 11 | `deploy` | `DEPLOY-APPROVAL.md` | `.pilot/COMPLETION.md` |
+
+---
+
+## Agent Roster (15 agents)
+
+| Agent | Used By |
+|-------|---------|
+| `domain-researcher` | interrogate (recon), research |
+| `software-architect` | design, review, execute (drift check) |
+| `senior-engineer` | execute (available via roster) |
+| `qa-engineer` | plan, validate, triage |
+| `ux-designer` | design (conditional) |
+| `project-manager` | plan, validate, triage, decompose |
+| `devils-advocate` | design, plan, review, triage |
+| `security-researcher` | design (conditional), review (conditional) |
+| `accessibility-engineer` | design (conditional), review (conditional) |
+| `technical-writer` | document |
+| `generator` | execute |
+| `evaluator` | execute |
+| `reviewer` | review |
+| `validator` | validate |
+| `triager` | triage |
+
+The research step produces `.pilot/TEAM.md` recommending which conditional agents to activate.
+
+---
+
+## Artifact Namespace
+
+```
+.pilot/
+  # Config (version-controlled)
+  config.json
+  plan-mapping.json
+  team-roster.json
+
+  # Step outputs (version-controlled)
+  IDEA.md
+  research/SUMMARY.md
+  TEAM.md
+  DESIGN.md
+  PLAN.md
+  REVIEW-REPORT.md
+  VALIDATE-REPORT.md
+  TRIAGE.md
+  DOCUMENTATION.md
+  DEPLOY-APPROVAL.md
+  COMPLETION.md
+
+  # Fix cycle archives (version-controlled)
+  fix-cycles/cycle-N/
+    TRIAGE.md
+    PLAN.md
+    plan-mapping.json
+
+  # Handoff archive (version-controlled)
+  handoffs/
+    handoff-interrogate.md
+    handoff-research.md
+    ...
+
+  # Runtime (gitignored)
+  state.json
+  lock.json
+  verdicts.jsonl
+```
+
+---
+
+## Resumption
+
+If the user invokes `/pilot` or `/pilot continue` at any point:
+1. The orchestrator scans artifacts to detect state
+2. Reads the most recent handoff from `.pilot/handoffs/`
+3. If the expected handoff is missing → pause and ask user via `AskUserQuestion` (missing-handoff protocol from `references/step-handoff.md`)
+4. Dispatches to the detected next step
+
+This makes the pipeline fully resumable from any point. The orchestrator never needs to know which step just finished — it derives everything from artifacts + handoff.

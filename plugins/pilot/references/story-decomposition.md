@@ -124,4 +124,4 @@ Inspect the output for cycles. If cycles are detected:
 
 ## Offline Constraint
 
-`.planning/` artifacts (PLAN.md, DESIGN.md) must exist locally. During decomposition, `plan-mapping.json` embeds the relevant DESIGN.md section content, so the pilot loop does not depend on reading PLAN.md or DESIGN.md after decomposition.
+`.pilot/` artifacts (PLAN.md, DESIGN.md) must exist locally. During decomposition, `plan-mapping.json` embeds the relevant DESIGN.md section content, so the execution loop does not depend on reading PLAN.md or DESIGN.md after decomposition.

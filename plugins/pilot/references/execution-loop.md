@@ -6,7 +6,7 @@ Complete specification for the autonomous execution loop. The SKILL.md router di
 
 Before entering the loop, the caller must have:
 1. Acquired the session lock
-2. Set up the auto-resume trigger (or skipped if validation failed)
+2. Checked auto-resume capability (tmux availability)
 3. Read/created `.pilot/config.json`
 4. Read/created `.pilot/state.json` with `status: "running"`
 5. Verified `.pilot/plan-mapping.json` exists
@@ -185,18 +185,21 @@ Agent(
 
 ### Step 5a: Post-Evaluator Integrity Check
 
-The evaluator should have modified ZERO files.
+The evaluator should have modified ZERO files. Record the file list before and compare after:
 
 ```bash
-git diff --name-only
+# Before evaluator spawn:
+git diff --name-only > /tmp/pilot-pre-eval-files
+
+# After evaluator returns:
+git diff --name-only > /tmp/pilot-post-eval-files
+
+diff /tmp/pilot-pre-eval-files /tmp/pilot-post-eval-files
 ```
 
-If any files were modified that weren't there before the evaluator:
+If new files appeared (evaluator modified code):
 1. Discard evaluator verdict
-2. Revert evaluator's changes: `git checkout .` (only the evaluator's changes — generator's changes are uncommitted)
-   - Actually: since generator's changes are also uncommitted, we need to be careful
-   - Better: use `git stash` before evaluator, `git stash pop` after, then check if anything extra appeared
-   - Simplification: Record `git diff --name-only` before evaluator spawn. After evaluator, compare. If new files appeared, that's the evaluator.
+2. Restore pre-evaluator state: `git checkout .` then re-apply generator changes from the stash
 3. Re-run evaluator (one retry only)
 4. If it modifies files again → mark story blocked: `story HP-N is blocked` with integrity violation reason
 
@@ -321,10 +324,11 @@ pause:
   Write state.json to disk
   Release lock (delete lock.json)
 
-  # Queue automatic context clear + resume via freshen (if available):
+  # Queue automatic context clear + resume via freshen:
   #   bash plugins/freshen/bin/freshen.sh queue "/pilot resume" --source pilot
-  # If freshen is not available or tmux is missing, fall back to auto-resume
-  # via crontab (which starts a new session with fresh context naturally).
+  # If the queue command fails (tmux not available), log a warning:
+  #   "Auto-resume unavailable. Run /pilot resume manually."
+  # Do NOT treat freshen failure as a fatal error — pause completes normally.
   return
 ```
 
@@ -350,15 +354,15 @@ complete:
   story handoff --since <total_duration>
 
   # 3. Completion artifact
-  Write .planning/COMPLETION.md:
+  Write .pilot/COMPLETION.md:
     - Project summary
     - Stories completed with acceptance criteria
     - Test results
     - Notable decisions and patterns
     - Duration and session count
 
-  # 4. Remove trigger
-  Remove crontab entry (or disable systemd timer)
+  # 4. Cancel freshen signal
+  bash plugins/freshen/bin/freshen.sh cancel --source pilot
 
   # 5. Update state
   state.status = "complete"

@@ -23,7 +23,7 @@
     },
     {
       "name": "pilot",
-      "description": "Autonomous execution harness — decomposes plans into stories, runs generator-evaluator loops, manages sessions with auto-resume",
+      "description": "Unified idea-to-deployment pipeline — interrogation, research, design, planning, autonomous execution, review, validation, triage, documentation, and deployment",
       "source": "./plugins/pilot"
     },
     {

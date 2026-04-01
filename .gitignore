@@ -12,9 +12,11 @@ Thumbs.db
 # Freshen plugin signals (ephemeral, consumed on clear)
 .freshen/
 
+# RCA investigation artifacts (ephemeral, per-investigation)
+.rca/
+
 # Pilot plugin runtime artifacts (gitignored)
 .pilot/state.json
 .pilot/lock.json
-.pilot/handoff.md
 .pilot/verdicts.jsonl
-# .pilot/config.json and .pilot/plan-mapping.json are version-controlled — do not ignore
+# .pilot/config.json, .pilot/plan-mapping.json, .pilot/handoffs/, and .pilot/fix-cycles/ are version-controlled — do not ignore
