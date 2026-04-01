@@ -29,7 +29,6 @@ Agentic Workflows is a Claude Code plugin marketplace (`mikeydotio/agentic-workf
 | pilot | `/pilot` | Unified idea-to-deployment pipeline: interrogation → research → design → planning → decompose → execute → review → validate → triage → document → deploy. 15 agents, 11 pipeline skills, state-machine orchestrator. FIX/ESCALATE triage loop. Has SessionStart and Stop hooks. |
 | rca | `/rca` | Root cause analysis: symptom intake → evidence collection → hypothesis formation → verification → remediation. 5 agents. |
 | semver | `/semver` | Version lifecycle: tracking, bumping, changelog generation, sync validation. Has SessionStart and PostToolUse hooks. |
-| ideate | `/ideate` | **DEPRECATED** — merged into pilot. Use `/pilot` instead. |
 
 ## Runtime Dependencies
 

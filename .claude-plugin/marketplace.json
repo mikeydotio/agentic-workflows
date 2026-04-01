@@ -7,11 +7,6 @@
   },
   "plugins": [
     {
-      "name": "ideate",
-      "description": "Flesh out ideas through relentless questioning, assumption challenging, domain research, and cross-functional agent team execution",
-      "source": "./plugins/ideate"
-    },
-    {
       "name": "rca",
       "description": "Perform thorough root cause analysis on bugs and regressions — find the REAL underlying cause, not just the symptom",
       "source": "./plugins/rca"
