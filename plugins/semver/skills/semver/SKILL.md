@@ -1,33 +1,23 @@
 ---
 name: semver
-description: Use when the user wants to manage semantic versioning for their project. Handles version tracking (start/stop), version bumping (major/minor/patch) with AI-generated changelog entries, reading current version, auto-bump configuration, and sync integrity validation/repair. Commands are /semver current, /semver bump, /semver tracking, /semver auto-bump, /semver validate, and /semver repair.
+description: Use when the user wants to manage semantic versioning for their project. Handles version tracking (start/stop), version bumping (major/minor/patch) with changelog generation, reading current version, auto-bump configuration, and sync integrity validation/repair. Commands are /semver current, /semver bump, /semver tracking, /semver auto-bump, /semver validate, and /semver repair.
 argument-hint: <current | bump <major|minor|patch> [--force] | tracking <start [options]|stop> | auto-bump <start|stop> | validate | repair>
 ---
 
 # Semantic Versioning Orchestrator
 
-You are a semantic versioning lifecycle manager. You handle version tracking, bumping, changelog generation, and auto-bump configuration for the project.
+You manage semantic versioning by delegating deterministic work to the CLI tool and handling user interaction.
 
-**Read these references before executing any command:**
-- `references/config-schema.md` — `.semver/config.yaml` schema and parsing
-- `references/file-locking.md` — File lock protocol for bump operations
-- `references/changelog-format.md` — CHANGELOG format specs and indicators
-- `references/claude-md-injection.md` — CLAUDE.md template and sentinel markers
-- `references/archive-format.md` — VERSIONING_ARCHIVE.md format for tracking stop/start
-- `references/sync-validation.md` — Validation checks and repair procedures for VERSION/CHANGELOG/tag sync
-- `references/user-hooks.md` — User-defined hook system for pre-bump and post-bump automation
+**CLI path:** `python3 ${CLAUDE_PLUGIN_ROOT}/bin/semver-cli`
 
 ## Hard Rules
 
-1. **Always read `.semver/config.yaml` first** (if it exists) to determine project state before any operation.
-2. **Never modify VERSION or CHANGELOG without holding the file lock** during bump operations.
-3. **Never fabricate changelog entries** — always read the actual git log and summarize real changes.
-4. **Respect the `version_prefix` setting** — apply it consistently to VERSION file content and git tags (when enabled).
-5. **Respect the `git_tagging` setting** — only create/check/manage git tags when `git_tagging: true` in config. When false, skip all tag operations.
-6. **Every question to the user MUST use `AskUserQuestion`** with exactly 1 question per call.
-7. **Mark bump source** — every CHANGELOG version entry must end with `_[manual]_`, `_[auto]_`, or `_[force]_`.
-8. **Validate before bumping** — run sync integrity checks before every bump. If VERSION, CHANGELOG, or tags (when tagging enabled) are out of sync, present repair options before proceeding.
-9. **Git-root only** — semver tracking can only be initialized at the root of a git repository (where `.git/` exists). Subprojects should use separate git repos.
+1. **Always parse CLI JSON output** before reporting to the user.
+2. **Every question to the user MUST use `AskUserQuestion`** with exactly 1 question per call.
+3. **Never fabricate changelog entries** — the CLI generates them from git log.
+4. **When CLI returns `ok: false`**, report the `message` to the user and stop.
+5. **Mark bump source** — pass `--source manual` for explicit user bumps, `--source auto` for auto-bump hook, `--source force` if `--force` was used.
+6. **Do NOT invoke `/semver bump` from within PROMPT_HOOK.md instructions** — this causes infinite recursion.
 
 ## Command Router
 
@@ -48,10 +38,10 @@ Parse the ARGUMENTS string to determine which command to run:
 /semver current                        — Show current version and status
 /semver bump <major|minor|patch>       — Bump version, generate changelog, commit (+ tag if enabled)
 /semver bump <major|minor|patch> --force — Bump even with no changes since last version change
-/semver tracking start                 — Initialize version tracking (no version set until first bump)
+/semver tracking start                 — Initialize version tracking
 /semver tracking start [options]       — Options: --version <ver>, --prefix <v|none>, --no-tags, --changelog <grouped|flat>, --branch <name>, --restore-tags
 /semver tracking stop                  — Archive and disable version tracking
-/semver auto-bump start                — Enable automatic version bumps on push to main
+/semver auto-bump start                — Enable automatic version bumps on push
 /semver auto-bump stop                 — Disable automatic version bumps
 /semver validate                       — Verify VERSION/CHANGELOG/tag sync integrity
 /semver repair                         — Guided repair of sync issues
@@ -61,509 +51,188 @@ Parse the ARGUMENTS string to determine which command to run:
 
 ## Command: `/semver current`
 
-1. Check if `.semver/config.yaml` exists. If not:
-   - Report: "Version tracking is not active for this project. Run `/semver tracking start` to begin."
-   - Stop.
+Run: `python3 ${CLAUDE_PLUGIN_ROOT}/bin/semver-cli current`
 
-2. Read `.semver/config.yaml` and verify `tracking: true`. If tracking is false:
-   - Report: "Version tracking is disabled. Run `/semver tracking start` to re-enable."
-   - Stop.
-
-3. Read the `VERSION` file (if it exists). Report:
-   - Current version (with prefix per config), or "No version set yet — run `/semver bump` to set the first version." if VERSION does not exist
-   - If version is set: find the commit that last modified VERSION via `git log -1 --format="%H %ai" -- VERSION`. Report the date and count commits since: `git rev-list <commit>..HEAD --count`
-   - Auto-bump status (on/off)
-   - Target branch
-   - Git tagging status (on/off)
+Parse JSON. Report:
+- If `tracking` is false: report the `message` and stop.
+- Current version (or "No version set yet — run `/semver bump` to set the first version.")
+- Commits since last version change and date
+- Auto-bump status, target branch, git tagging status
 
 ---
 
 ## Command: `/semver bump <major|minor|patch> [--force]`
 
-### Parse Arguments
+Extract `BUMP_TYPE` (major/minor/patch) and `FORCE` flag from arguments.
 
-Extract:
-- `BUMP_TYPE`: one of `major`, `minor`, `patch` (required — if missing, show usage and stop)
-- `FORCE`: true if `--force` is present
+### Step 1: Gather
 
-### Pre-check: Re-entrancy Guard
+Run: `python3 ${CLAUDE_PLUGIN_ROOT}/bin/semver-cli bump gather <BUMP_TYPE> [--force]`
 
-Check if the environment variable `SEMVER_BUMP_IN_PROGRESS` is set to `1` by running:
-```
-echo "${SEMVER_BUMP_IN_PROGRESS:-}"
-```
+Parse JSON:
+- If `ok` is false: report the `message` and stop.
+- If `no_commits` is true (and not force): report the `message` and stop.
 
-If it equals `1`:
-- Report: "A version bump is already in progress. Nested bumps are not allowed — this prevents infinite loops when hooks or PROMPT_HOOK.md instructions inadvertently trigger another bump."
-- Stop immediately. Do not proceed with any further checks or operations.
+### Step 2: Handle first version
 
-**Also remember internally:** Once you begin executing this bump command (past this point), you are in a bump. Do NOT invoke `/semver bump` again until this entire flow completes, even if a PROMPT_HOOK.md or hook output suggests doing so.
-
-### Pre-check: Tracking Active
-
-Read `.semver/config.yaml`. If missing or `tracking: false`:
-- Report: "Version tracking is not active. Run `/semver tracking start` first."
-- Stop.
-
-### Pre-check: First Version
-
-If the `VERSION` file does not exist (first bump after `tracking start`):
+If `version_exists` is false:
 - Use AskUserQuestion:
   - **header:** "First version"
   - **question:** "No version is set yet. What should the first version be?"
-  - **options:**
-    - "v0.1.0 (Recommended)" / "Standard starting point for new projects"
-    - "v1.0.0" / "Already stable — start at first major release"
-    - "v0.0.1" / "Very early stage — pre-feature"
-- Write the chosen version to the `VERSION` file (applying the configured `version_prefix`).
-- Create `CHANGELOG.md` with the initial template (see `references/changelog-format.md`), using the chosen version and today's date. Mark as `_[manual]_`.
-- Commit:
-  ```
-  git add VERSION CHANGELOG.md
-  git commit -m "chore: initialize version at <version>"
-  ```
-- If `git_tagging: true` in config: `git tag "<version>"`
-- Report the version set (and whether tag was created), then stop. The user can now run `/semver bump` again to perform the actual bump.
+  - **options:** "v0.1.0 (Recommended)" / "v1.0.0" / "v0.0.1"
+- Run: `python3 ${CLAUDE_PLUGIN_ROOT}/bin/semver-cli bump first-version <chosen>`
+- Report result and stop.
 
-### Pre-check: Commits Since Last Bump
+### Step 3: Handle questions
 
-Find the commit that last modified VERSION: `git log -1 --format=%H -- VERSION`. Then count commits since: `git rev-list <last-bump-commit>..HEAD --count`.
+Process `questions_needed` array from gather result:
 
-If count is 0 and `FORCE` is false:
-- Report: "No commits since the last version change (<version>). Nothing to bump. Use `--force` if you want a version-only bump (e.g., consolidating minor versions into a major release)."
-- Stop.
+**If `dirty_tree`:**
+Use AskUserQuestion:
+- **header:** "Dirty tree"
+- **question:** "You have uncommitted changes: <list dirty_files>. What would you like to do?"
+- **options:** "Include all in bump commit" / "Stash and bump clean" / "Cancel"
+- If cancel: stop.
 
-If count is 0 and `FORCE` is true:
-- Continue. The changelog entry will note this is a forced version-only bump.
+**If `wrong_branch`:**
+Use AskUserQuestion:
+- **header:** "Branch"
+- **question:** "You're on branch `<current_branch>`, not `<target_branch>`. Bumping from a non-target branch means the tag may not be reachable from the target branch until merged. Proceed?"
+- **options:** "Proceed anyway" / "Cancel"
+- If cancel: stop.
 
-### Pre-check: Dirty Working Tree
+**If `validation_failed`:**
+Use AskUserQuestion:
+- **header:** "Sync issue"
+- **question:** "Validation found issues. Bumping on top of broken sync may compound the problem."
+- **options:** "Run repair first" / "Bump anyway" / "Cancel"
+- If repair: run `/semver repair`, then re-run this bump command.
+- If cancel: stop.
 
-Run `git status --porcelain`. If there are uncommitted changes:
+### Step 4: Pre-bump PROMPT_HOOK
 
-1. Summarize the changes for the user (modified files, untracked files).
-2. Use AskUserQuestion:
-   - **header:** "Dirty tree"
-   - **question:** "You have uncommitted changes. What would you like to do with them before bumping?"
-   - **options:**
-     - "Include all in bump commit" / "Stage everything and include it in the version bump commit"
-     - "Stash and bump clean" / "Stash changes, do the bump, then unstash"
-     - "Let me choose files" / "I'll tell you which changes to include"
-     - "Cancel" / "Abort the bump — I'll clean up first"
-3. Execute the user's choice:
-   - **Include all**: `git add -A` before the bump commit
-   - **Stash and bump clean**: `git stash push -m "semver: pre-bump stash"`, do bump, then `git stash pop`
-   - **Let me choose**: Ask user which files to include (use AskUserQuestion with file list), `git add` those files, `git stash push --keep-index -m "semver: pre-bump stash"` for the rest, do bump, then `git stash pop`
-   - **Cancel**: Stop.
-4. After the bump, if stash was used, remind the user: "Your stashed changes have been restored. Consider committing or cleaning up your working tree."
+If `has_pre_bump_prompt_hook` is true: Read the file at `pre_bump_prompt_hook_path` and follow its instructions. Context: BUMP_TYPE, old_version, new_version from gather result. **Do NOT trigger `/semver bump`**. If instructions indicate abort, stop.
 
-### Pre-check: Current Branch
+### Step 5: Execute
 
-Run `git rev-parse --abbrev-ref HEAD`. Read `target_branch` from config.
+Build the command from user answers:
+```
+python3 ${CLAUDE_PLUGIN_ROOT}/bin/semver-cli bump execute <BUMP_TYPE> \
+  --source <manual|force> \
+  [--force] \
+  [--dirty-action <include|stash|none>] \
+  [--skip-validation] \
+  [--overwrite-tag | --skip-tag] \
+  --plugin-root ${CLAUDE_PLUGIN_ROOT}
+```
 
-If current branch != target_branch:
-- Warn the user:
-  > "You're on branch `<current>`, not `<target>`. Bumping from a non-target branch means:
-  > - The version tag will point to a commit on this branch
-  > - The tag may not be reachable from the target branch until merged
-  > - Auto-bump hooks check the target branch, so this version may trigger another bump later
-  >
-  > It's recommended to switch to `<target>` first."
-- Use AskUserQuestion:
-  - **header:** "Branch"
-  - **question:** "Proceed with bump on this branch?"
-  - **options:**
-    - "Proceed anyway" / "I know what I'm doing"
-    - "Cancel" / "I'll switch branches first"
-- If cancel, stop.
+Use `--source force` if `--force` was used, otherwise `--source manual`.
+Map dirty tree answer: "Include all" → `--dirty-action include`, "Stash" → `--dirty-action stash`.
+If user chose "Bump anyway" for validation: add `--skip-validation`.
+If `tag_conflict` in gather result and user chooses overwrite: `--overwrite-tag`.
 
-### Pre-check: Sync Integrity
+### Step 6: Post-bump PROMPT_HOOK
 
-Run validation checks 1-5 from `/semver validate` (see `references/sync-validation.md`):
-1. Config exists and tracking active
-2. VERSION exists and well-formed
-3. Tag exists for current VERSION (only if `git_tagging: true`; skip if false)
-4. Tag points to correct commit (only if `git_tagging: true`; skip if false)
-5. CHANGELOG has entry for current VERSION
+Parse execute result. If `post_hooks.prompt_hook` is not null, that is the content of the post-bump PROMPT_HOOK.md file. Follow its instructions. Context: BUMP_TYPE, old_version, new_version. **Do NOT trigger `/semver bump`**.
 
-If any check **FAILS**:
-- Report the specific failures to the user.
-- Use AskUserQuestion:
-  - **header:** "Sync issue"
-  - **question:** "Validation found issues with the current version state. Bumping on top of broken sync may compound the problem."
-  - **options:**
-    - "Run repair first" / "Attempt to fix sync issues, then retry the bump"
-    - "Bump anyway" / "I understand the risk — proceed with the bump"
-    - "Cancel" / "Abort — I'll investigate manually"
-- **Run repair first**: Execute the `/semver repair` flow, re-validate, then proceed with bump if all checks pass.
-- **Bump anyway**: Continue to the critical section.
-- **Cancel**: Stop.
+### Step 7: Report
 
-If all checks **PASS**, proceed silently (no output needed).
+If any `post_hooks.warnings` exist, report each warning.
 
-### Compute New Version
-
-Before entering the critical section, compute the new version so it can be passed to hooks:
-
-1. **Read current version** from VERSION file. Strip whitespace. Store as `OLD_VERSION`.
-2. Remove version prefix if present to get bare `MAJOR.MINOR.PATCH`.
-3. **Compute new version:**
-   - `major` bump: `MAJOR+1.0.0`
-   - `minor` bump: `MAJOR.MINOR+1.0`
-   - `patch` bump: `MAJOR.MINOR.PATCH+1`
-4. **Apply prefix:** Read `version_prefix` from config. Store as `NEW_VERSION` = `<prefix><MAJOR.MINOR.PATCH>`.
-
-At this point you have: `BUMP_TYPE`, `OLD_VERSION`, and `NEW_VERSION`. These are used by hooks and by the critical section.
-
-### Execute Pre-Bump Hooks
-
-Run user-defined hooks before modifying any version files. See `references/user-hooks.md` for the full contract.
-
-1. **Read PROMPT_HOOK.md:** If `.semver/hooks/pre-bump/PROMPT_HOOK.md` exists, read its contents. Follow the instructions in the file now, in the context of the current bump. The following context is available: `BUMP_TYPE`, `OLD_VERSION`, `NEW_VERSION`. **Do NOT trigger any `/semver bump` commands from within these instructions.** If the instructions indicate the bump should be aborted (e.g., a blocking issue is found), abort the bump and report the reason. After completing the PROMPT_HOOK.md instructions (or if the file does not exist), continue with the next step.
-
-2. **Run hook scripts:** Execute the hook runner:
-   ```
-   bash <plugin-root>/hooks/run-user-hooks.sh pre-bump <BUMP_TYPE> <OLD_VERSION> <NEW_VERSION> <project-dir>
-   ```
-
-   Parse the JSON result:
-   - If `status` is `"ok"`: Continue. If `hooks_run` > 0, briefly note: "Pre-bump hooks passed (<N> hooks)."
-   - If `status` is `"failed"`: Report which hook failed (`failed_hook`) and the output. **Abort the bump entirely** — do not enter the critical section. Report: "Pre-bump hook `<name>` failed (exit <code>). Bump aborted."
-   - If `status` is `"blocked"`: A re-entrancy guard was triggered. Report the reason and stop.
-   - If `hooks_run` is 0 and `prompt_hook` is null: No hooks exist. Continue silently.
-
-### Execute Bump (Critical Section)
-
-**All steps below must be performed inside a file lock.** Follow the protocol in `references/file-locking.md`.
-
-Use the pre-computed `OLD_VERSION` and `NEW_VERSION` from the "Compute New Version" step above.
-
-1. **Generate changelog entry:**
-   - If FORCE and no commits: Write a brief entry noting this is a version-only adjustment
-   - Otherwise:
-     - Find the last bump commit: `git log -1 --format=%H -- VERSION` (this is the VERSION-changing commit anchor)
-     - Run `git log <last-bump-commit>..HEAD --format="%h %s"` to get commits since last version change
-     - If needed for clarity, also check `git diff <last-bump-commit>..HEAD --stat`
-     - Read `changelog_format` from config
-     - **Grouped format**: Categorize commits by conventional commit prefix (see `references/changelog-format.md`), write concise human-friendly descriptions with commit hashes
-     - **Flat format**: List commits linearly with hashes and descriptions
-   - Determine the indicator: `_[manual]_` for explicit user bump, `_[auto]_` if triggered by auto-bump hook, `_[force]_` if `--force` was used
-
-2. **Write VERSION file:** Write the new version string (with prefix per config) followed by a newline. Nothing else in the file.
-
-3. **Update CHANGELOG.md:** Prepend the new version section after the title/header lines (before the first existing `## [` section). See `references/changelog-format.md` for exact format.
-
-4. **Commit:**
-   ```
-   git add VERSION CHANGELOG.md
-   git commit -m "chore(release): <new-version-string>"
-   ```
-
-5. **Tag (only if `git_tagging: true` in config):**
-
-   If `git_tagging: false`: skip this step entirely — the commit is the release artifact.
-
-   If `git_tagging: true`:
-   - Check if the tag already exists: `git tag -l "<new-version-string>"`
-   - If it exists:
-     - Use AskUserQuestion:
-       - **header:** "Tag conflict"
-       - **question:** "Git tag `<new-version-string>` already exists. How should this be handled?"
-       - **options:**
-         - "Overwrite" / "Delete the existing tag and create a new one on this commit"
-         - "Skip tagging" / "Keep the commit but don't create a tag"
-         - "Cancel" / "Abort — revert the commit and restore previous version"
-     - **Overwrite**: `git tag -d <tag>` then `git tag <tag>`
-     - **Skip tagging**: Continue without tagging
-     - **Cancel**: `git reset --soft HEAD~1`, restore VERSION and CHANGELOG from before, release lock, stop
-   - If it doesn't exist: `git tag "<new-version-string>"`
-
-6. **Release lock.**
-
-### Execute Post-Bump Hooks
-
-Run user-defined hooks after the version has been committed and tagged. See `references/user-hooks.md` for the full contract.
-
-1. **Run hook scripts:** Execute the hook runner:
-   ```
-   bash <plugin-root>/hooks/run-user-hooks.sh post-bump <BUMP_TYPE> <OLD_VERSION> <NEW_VERSION> <project-dir>
-   ```
-
-   Parse the JSON result:
-   - If `status` is `"ok"` with no warnings: Continue silently.
-   - If `status` is `"ok"` with warnings: For each warning, report: "Post-bump hook `<hook>` failed (exit <code>). The version bump has already been committed. Review the hook output and address any issues manually." **Do NOT roll back the bump.**
-   - If `hooks_run` is 0 and `prompt_hook` is null: No hooks exist. Continue silently.
-
-2. **Read PROMPT_HOOK.md:** If `.semver/hooks/post-bump/PROMPT_HOOK.md` exists, read its contents. Follow the instructions in the file now, in the context of the completed bump. The following context is available: `BUMP_TYPE`, `OLD_VERSION`, `NEW_VERSION`. **Do NOT trigger any `/semver bump` commands from within these instructions.** After completing the instructions (or if the file does not exist), continue to the Post-Bump Report.
-
-### Post-Bump Report
-
-Report to the user:
+Report:
 - Previous version → New version
-- Commits included (count)
-- Tag created, skipped, or tagging disabled
-- Changelog entry preview (first few lines)
-
-### Post-Bump Verification
-
-After the bump completes, run a quick integrity check to confirm artifacts are in sync:
-
-1. **Tag exists (only if `git_tagging: true`):** `git tag -l "<new-version-string>"` — confirm the expected tag is present.
-2. **VERSION matches:** Read VERSION file — confirm its content matches the new version string.
-3. **CHANGELOG has entry:** Read the first 20 lines of CHANGELOG.md — confirm a `## [<new-version-string>]` header is present.
-
-If all applicable checks pass: no additional output needed (the Post-Bump Report already confirms success).
-
-If any check fails: warn the user immediately with the specific issue and remediation steps. This should not happen under normal conditions — if it does, it indicates an environmental issue (e.g., a git hook modified files after the commit, a disk write failure, or a race condition).
+- Commits included
+- Tag created/skipped/tagging disabled
+- Changelog preview (from `changelog_preview`)
 
 ---
 
 ## Command: `/semver tracking start`
 
-### Pre-check: Git Root
+Run: `python3 ${CLAUDE_PLUGIN_ROOT}/bin/semver-cli tracking start [options]`
 
-Verify that the current working directory is the root of a git repository:
+Pass through any user-provided options: `--version`, `--prefix`, `--no-tags`, `--changelog`, `--branch`, `--restore-tags`.
 
-1. Run `git rev-parse --show-toplevel` to get the git root.
-2. Compare it to the current project directory (normalize both paths).
-3. If they don't match:
-   - Report: "Semver tracking can only be initialized at the root of a git repository. Current directory: `<cwd>`. Git root: `<git-root>`. If you need independent versioning for a subdirectory, make it a separate git repository first (e.g., using git subrepos)."
-   - Stop.
-
-### Check for Existing Config
-
-If `.semver/config.yaml` exists and `tracking: true`:
-- Report: "Version tracking is already active. Current version: <version>."
-- Stop.
-
-### Check for Archive
-
-Look for `VERSIONING_ARCHIVE.md` in the project root.
-
-**If archive found — Smart Restore:**
-
-1. Read the archive's YAML frontmatter for metadata.
-2. Report what was found: "Found a versioning archive from <archived_at>. Last version: <last_version>."
-3. Auto-restore VERSION and CHANGELOG from the archive sections (extract content from fenced code blocks).
-4. Restore config from the `## Config` section, setting `tracking: true`.
-5. If `tags` is in `items_archived`:
-   - **Default:** Skip tag restoration (tags may still exist on the remote).
-   - **Override:** If `--restore-tags` was passed, parse the `## Tags` section and recreate tags (verify commits exist first).
-   - Report: "Skipped tag restoration (use `--restore-tags` to recreate them)." or "Restored N tags from archive." as appropriate.
-6. Inject CLAUDE.md section (see below).
-7. Rename `VERSIONING_ARCHIVE.md` to `VERSIONING_ARCHIVE.md.bak`.
-8. Commit: `git add -A && git commit -m "chore: restore semver tracking from archive"`
-9. Report what was restored.
-
-**If no archive found — Fresh Start:**
-
-### Parse Options
-
-Extract optional flags from the ARGUMENTS string (everything after `tracking start`):
-- `--version <ver>`: Starting version number (bare semver, e.g. `0.1.0`, `1.0.0`). Do not include the prefix here. If omitted, no version is set — the first `/semver bump` will prompt for it.
-- `--prefix <v|none>`: `v` for v-prefixed versions, `none` for bare numbers.
-- `--no-tags`: Disable git tagging (sets `git_tagging: false`). Version bumps will create commits but not tags.
-- `--changelog <grouped|flat>`: Changelog entry format.
-- `--branch <name>`: Target branch for auto-bump hooks and push detection.
-
-**Detect default branch** (used when `--branch` is not provided):
-```
-git symbolic-ref refs/remotes/origin/HEAD 2>/dev/null | sed 's@^refs/remotes/origin/@@'
-```
-If that fails (e.g. no remote), fall back to `git rev-parse --abbrev-ref HEAD`.
-
-Apply defaults for any option not provided:
-
-| Flag | Default |
-|------|---------|
-| `--version` | _(none — version set on first bump)_ |
-| `--prefix` | `v` |
-| `--no-tags` | _(not set — tagging enabled by default)_ |
-| `--changelog` | `grouped` |
-| `--branch` | _(detected from git)_ |
-
-If any flag has an invalid value, report the error with valid values and stop.
-
-### Create Files
-
-1. Create `.semver/config.yaml` with:
-   ```yaml
-   tracking: true
-   auto_bump: false
-   auto_bump_confirm: true
-   version_prefix: "<resolved>"
-   git_tagging: <true unless --no-tags was passed>
-   changelog_format: "<resolved>"
-   target_branch: "<resolved>"
-   ```
-
-2. **If `--version` was provided:**
-   - Create `VERSION` file with the resolved starting version string (prefix + number + newline).
-   - Create `CHANGELOG.md` with the initial template (see `references/changelog-format.md`), using the starting version and today's date. Mark as `_[manual]_`.
-
-3. **Inject CLAUDE.md section:** Follow the protocol in `references/claude-md-injection.md`:
-   - Check if `<!-- semver:start -->` already exists in CLAUDE.md
-   - If yes: replace the block between sentinels
-   - If no: append the block (with a preceding blank line) to the end of CLAUDE.md
-   - If CLAUDE.md doesn't exist: create it with just the semver block
-
-4. Commit:
-   ```
-   git add .semver/config.yaml CLAUDE.md
-   # Also add VERSION and CHANGELOG.md if they were created
-   git commit -m "chore: initialize semver tracking"
-   ```
-   If `--version` was provided and `git_tagging` is true, also create the git tag: `git tag "<version>"`
-
-5. Report: tracking enabled, target branch, git tagging status, and either the version set or "No version set — run `/semver bump` when ready." Also mention: "Tip: You can add custom pre-bump and post-bump hooks in `.semver/hooks/`. Ask me to set one up, or see `references/user-hooks.md` for details."
+Parse JSON:
+- If `action` is `already_active`: report the message and stop.
+- If `action` is `archive_restore` and `questions_needed` contains `restore_tags`:
+  - Use AskUserQuestion:
+    - **header:** "Tags"
+    - **question:** "The archive contains <tag count> version tags. Restore them?"
+    - **options:** "Skip tag restoration (Recommended)" / "Restore tags"
+  - If restore: run `python3 ${CLAUDE_PLUGIN_ROOT}/bin/semver-cli tracking restore-tags`
+- Report: tracking enabled, target branch, tagging status, version (if set).
 
 ---
 
 ## Command: `/semver tracking stop`
 
-### Pre-check
+### Step 1: Gather
 
-Read `.semver/config.yaml`. If missing or `tracking: false`:
-- Report: "Version tracking is not active."
-- Stop.
+Run: `python3 ${CLAUDE_PLUGIN_ROOT}/bin/semver-cli tracking stop-gather`
 
-### Ask What to Archive
+If `ok` is false: report error and stop.
 
-Read `git_tagging` from config. Build the archive options list:
+### Step 2: Ask what to archive
 
 Use AskUserQuestion:
 - **header:** "Archive"
-- **question:** "Which version-related items would you like to archive? Archived items will be saved to VERSIONING_ARCHIVE.md before deletion."
-- **options:**
-  - "VERSION file" / "Archive the current version number"
-  - "CHANGELOG" / "Archive the full changelog history"
-  - _(only if `git_tagging: true`)_ "Git tags" / "Archive the list of version tags"
+- **question:** "Which items to archive to VERSIONING_ARCHIVE.md before disabling tracking?"
+- **options:** "VERSION file" / "CHANGELOG" / (only if git_tagging) "Git tags"
 - **multiSelect:** true
 
-### Handle Git Tags
+### Step 3: Tag deletion (if tags selected and git_tagging)
 
-**Skip this section entirely if `git_tagging: false` in config.**
+If user selected tags:
+Use AskUserQuestion:
+- **header:** "Remote tags"
+- **question:** "Delete version tags from the remote too? Warning: this affects all collaborators."
+- **options:** "Delete local only (Recommended)" / "Delete local and remote" / "Don't delete tags"
 
-If the user selected git tags for archival:
+### Step 4: Execute
 
-1. List the version tags: `git tag -l '<prefix>*' --sort=-v:refname`
-2. Use AskUserQuestion:
-   - **header:** "Remote tags"
-   - **question:** "Should version tags also be deleted from the remote? Warning: deleting remote tags affects all collaborators and is irreversible. For multi-collaborator repositories, it's recommended to keep remote tags."
-   - **options:**
-     - "Delete local only (Recommended)" / "Remove local tags but leave remote tags intact"
-     - "Delete local and remote" / "Remove tags everywhere — I understand the impact"
-     - "Don't delete tags" / "Archive the tag list but leave all tags in place"
+```
+python3 ${CLAUDE_PLUGIN_ROOT}/bin/semver-cli tracking stop-execute \
+  --archive <comma-separated items> \
+  --delete-tags <local|both|none>
+```
 
-### Build Archive
+Map: "Delete local only" → `--delete-tags local`, "Delete local and remote" → `--delete-tags both`, "Don't delete tags" → `--delete-tags none`.
 
-Write `VERSIONING_ARCHIVE.md` following the format in `references/archive-format.md`:
-1. YAML frontmatter with metadata and `items_archived` list
-2. `## VERSION` section (if archived): embed VERSION file content in fenced code block
-3. `## CHANGELOG` section (if archived): embed CHANGELOG.md content in fenced code block
-4. `## Tags` section (if archived): embed output of `git tag -l '<prefix>*' --format='%(refname:short)  %(objectname:short)  %(creatordate:short)  %(subject)'`
-5. `## Config` section (always): embed `.semver/config.yaml` content
-
-### Clean Up
-
-1. Set `tracking: false` in `.semver/config.yaml` (also set `auto_bump: false`)
-2. Delete archived files (VERSION, CHANGELOG.md — only the ones the user chose to archive)
-3. Delete local tags if the user chose to:
-   - Local only: `git tag -d <tag>` for each version tag
-   - Local + remote: `git tag -d <tag>` then `git push origin --delete <tag>` for each
-4. Remove CLAUDE.md injection: delete everything between `<!-- semver:start -->` and `<!-- semver:end -->` inclusive
-5. Commit:
-   ```
-   git add -A
-   git commit -m "chore: stop semver tracking — archived to VERSIONING_ARCHIVE.md"
-   ```
-
-6. Report: what was archived, what was deleted, where the archive is.
+Report results.
 
 ---
 
 ## Command: `/semver auto-bump start`
 
-### Pre-check
-
-Read `.semver/config.yaml`. If missing or `tracking: false`:
-- Report: "Version tracking must be active before enabling auto-bump. Run `/semver tracking start` first."
-- Stop.
-
-If `auto_bump: true` already:
-- Report: "Auto-bump is already enabled."
-- Stop.
-
-### Configure
-
 Use AskUserQuestion:
 - **header:** "Confirm"
-- **question:** "When auto-bump triggers after a push, should Claude ask you to confirm the bump level before executing?"
-- **options:**
-  - "Yes — confirm first (Recommended)" / "Claude proposes major/minor/patch and waits for your approval"
-  - "No — fully automatic" / "Claude decides and executes the bump without asking"
+- **question:** "Should Claude ask you to confirm the bump level before executing?"
+- **options:** "Yes — confirm first (Recommended)" / "No — fully automatic"
 
-### Apply
+Run: `python3 ${CLAUDE_PLUGIN_ROOT}/bin/semver-cli auto-bump start --confirm <true|false>`
 
-1. Update `.semver/config.yaml`: set `auto_bump: true` and `auto_bump_confirm: <chosen>`.
-2. Report:
-   - Auto-bump is now enabled
-   - The PostToolUse hook will detect pushes to `<target_branch>` and trigger version analysis
-   - Confirmation mode: on/off
-   - Note: the hook reads config on every invocation, so this takes effect immediately
+Report: auto-bump enabled, confirmation mode, target branch.
 
 ---
 
 ## Command: `/semver auto-bump stop`
 
-### Pre-check
+Run: `python3 ${CLAUDE_PLUGIN_ROOT}/bin/semver-cli auto-bump stop`
 
-Read `.semver/config.yaml`. If missing or `tracking: false` or `auto_bump: false`:
-- Report: "Auto-bump is not currently enabled."
-- Stop.
-
-### Apply
-
-1. Update `.semver/config.yaml`: set `auto_bump: false`.
-2. Report:
-   - Auto-bump is now disabled
-   - The hook will now show a nudge message instead of triggering automatic bumps
-   - You can still bump manually with `/semver bump <major|minor|patch>`
+Report result.
 
 ---
 
 ## Command: `/semver validate`
 
-Verifies that VERSION, CHANGELOG.md, and git tags are in sync. See `references/sync-validation.md` for full details on each check.
+Run: `python3 ${CLAUDE_PLUGIN_ROOT}/bin/semver-cli validate`
 
-### Pre-check
-
-Read `.semver/config.yaml`. If missing or `tracking: false`:
-- Report: "Version tracking is not active. Nothing to validate."
-- Stop.
-
-### Run Checks
-
-Read `git_tagging` from config. Execute all 6 validation checks in order. For each check, report PASS, FAIL, SKIP, or WARN:
-
-1. **Config exists and tracking active** — already confirmed by pre-check, report PASS.
-2. **VERSION exists and well-formed** — read VERSION file, match against `<prefix>MAJOR.MINOR.PATCH`.
-3. **Tag exists for current VERSION** — if `git_tagging: false`, report `[SKIP] Git tagging disabled`. Otherwise: `git tag -l "<version_string>"`.
-4. **Tag points to correct commit** — if `git_tagging: false`, report `[SKIP] Git tagging disabled`. Otherwise: compare `git rev-list -n 1 <tag>` vs `git log -1 --format=%H -- VERSION`.
-5. **CHANGELOG has entry for current VERSION** — search for `## [<version_string>]` header in CHANGELOG.md.
-6. **No orphaned tags** — if `git_tagging: false`, report `[SKIP] Git tagging disabled`. Otherwise: for each tag matching `<prefix>*`, check for a corresponding `## [<tag>]` header in CHANGELOG.md.
-
-### Report
-
-Print the validation results in this format:
-
+Parse JSON. Format and report checks:
 ```
 [semver] Validation results:
-  [PASS] Config exists and tracking is active
-  [PASS] VERSION file: <version>
-  [PASS/FAIL] Tag <version> exists / not found
-  [PASS/FAIL] Tag and VERSION point to same commit (<hash>) / Tag → <hash1>, VERSION last modified → <hash2>
-  [PASS/FAIL] CHANGELOG entry for <version> / No CHANGELOG entry for <version>
-  [PASS/WARN] No orphaned tags / N orphaned tag(s): <list>
+  [<STATUS>] <detail>
+  ...
   Status: <summary>
 ```
 
@@ -573,107 +242,43 @@ If any FAIL: suggest "Run `/semver repair` to fix."
 
 ## Command: `/semver repair`
 
-Guided repair for sync issues between VERSION, CHANGELOG.md, and git tags. See `references/sync-validation.md` for full repair scenario details.
+### Step 1: Diagnose
 
-### Pre-check
+Run: `python3 ${CLAUDE_PLUGIN_ROOT}/bin/semver-cli repair diagnose`
 
-Read `.semver/config.yaml`. If missing or `tracking: false`:
-- Report: "Version tracking is not active. Nothing to repair."
-- Stop.
+If `all_pass` is true: report "All integrity checks passed." and stop.
 
-### Diagnose
+### Step 2: Repair each failure
 
-Run the full `/semver validate` check suite. If all checks pass:
-- Report: "All integrity checks passed. Nothing to repair."
-- Stop.
+For each item in `repairs_needed`:
 
-### Repair Each Failure
-
-For each FAIL detected, present the appropriate repair options via AskUserQuestion. Handle failures in the order they were detected.
-
-**Note:** Tag-related repair scenarios (missing tag, tag mismatch, VERSION behind tag) only apply when `git_tagging: true` in config. When tagging is disabled, these scenarios cannot occur and should be skipped.
-
-**FAIL: Tag missing for current VERSION** (only when `git_tagging: true`; VERSION=`v1.3.0`, latest tag=`v1.2.0` or no tags):
-
+**`tag_missing`:**
 Use AskUserQuestion:
 - **header:** "Missing tag"
-- **question:** "VERSION says `<version>` but no git tag exists for it."
-- **options:**
-  - "Create tag + changelog entry" / "Generate a changelog entry from the git log and create the tag. Commit message: chore(release): <version> [repair]"
-  - "Revert VERSION" / "Reset VERSION to match the latest tag (<latest_tag>)"
-  - "Skip" / "Leave it for now"
+- **question:** "VERSION says `<version>` but no git tag exists."
+- **options:** "Create tag + changelog entry" / "Revert VERSION to <latest_tag>" / "Skip"
+- Execute chosen action:
+  - Create: `python3 ${CLAUDE_PLUGIN_ROOT}/bin/semver-cli repair execute create-tag --version <version>`
+  - Revert: `python3 ${CLAUDE_PLUGIN_ROOT}/bin/semver-cli repair execute revert-version --to <latest_tag>`
 
-Execute the chosen action:
-- **Create tag + changelog**: Generate changelog entry from `git log <latest_tag>..HEAD`, update CHANGELOG.md, commit, tag.
-- **Revert VERSION**: Write latest tag's version string to VERSION, commit.
+**`tag_wrong_commit`:**
+Use AskUserQuestion:
+- **header:** "Tag mismatch"
+- **question:** "Tag and VERSION point to different commits."
+- **options:** "Move tag to VERSION's commit" / "Revert VERSION to match tag" / "Skip"
+- Execute chosen action:
+  - Move: `python3 ${CLAUDE_PLUGIN_ROOT}/bin/semver-cli repair execute move-tag --version <version> --commit <version_commit>`
+  - Revert: `python3 ${CLAUDE_PLUGIN_ROOT}/bin/semver-cli repair execute revert-version --to <version>`
 
-**FAIL: CHANGELOG entry missing** (VERSION matches but no `## [<version>]` in CHANGELOG):
-
+**`changelog_missing`:**
 Use AskUserQuestion:
 - **header:** "Missing changelog"
 - **question:** "Version `<version>` has no CHANGELOG entry."
-- **options:**
-  - "Generate entry" / "Create a changelog entry from the git log between the previous tag and this one"
-  - "Skip" / "Leave the changelog as-is"
+- **options:** "Generate entry" / "Skip"
+- Execute: `python3 ${CLAUDE_PLUGIN_ROOT}/bin/semver-cli repair execute generate-entry --version <version>`
 
-Execute:
-- **Generate entry**: Find the previous version-changing commit (or use tags if `git_tagging: true`), generate entry from `git log <prev-commit>..<current-commit>`, insert into CHANGELOG at correct position, commit.
+### Step 3: Re-validate
 
-**FAIL: Tag points to wrong commit** (only when `git_tagging: true`; tag and VERSION exist but point to different commits):
+Run: `python3 ${CLAUDE_PLUGIN_ROOT}/bin/semver-cli validate`
 
-Use AskUserQuestion:
-- **header:** "Tag mismatch"
-- **question:** "Tag `<version>` points to commit `<tag_hash>` but VERSION was last modified in commit `<version_hash>`."
-- **options:**
-  - "Move tag" / "Delete the old tag and recreate it at the commit that last modified VERSION"
-  - "Revert VERSION" / "Restore VERSION to match the tagged commit's content"
-  - "Skip" / "Leave the discrepancy"
-
-Execute:
-- **Move tag**: `git tag -d <tag>`, `git tag <tag> <version_hash>`. Warn if tag exists on remote.
-- **Revert VERSION**: `git show <tag>:VERSION > VERSION`, commit.
-
-**FAIL: VERSION behind latest tag** (only when `git_tagging: true`; latest tag=`v1.3.0`, VERSION=`v1.2.0`):
-
-Use AskUserQuestion:
-- **header:** "VERSION behind tag"
-- **question:** "Latest tag is `<latest_tag>` but VERSION says `<version>`."
-- **options:**
-  - "Update VERSION" / "Write <latest_tag> to VERSION to match the tag"
-  - "Delete tag" / "The tag was created in error — remove it"
-  - "Skip"
-
-Execute:
-- **Update VERSION**: Write tag's version to VERSION, commit.
-- **Delete tag**: `git tag -d <tag>`. Ask about remote deletion via AskUserQuestion.
-
-### Post-Repair Validation
-
-After all repair actions complete, re-run the full validation suite. Report:
-- If all pass: "All integrity checks passed."
-- If issues remain: list them and note which require manual intervention.
-
----
-
-## File Lock Protocol
-
-For bump operations, follow the locking protocol in `references/file-locking.md`. The key points:
-
-1. Generate a per-project lock path: `/tmp/semver-<hash>.lock`
-2. Detect platform: `command -v flock` → use flock; else use mkdir fallback
-3. Acquire lock before reading VERSION
-4. Release lock after tagging (or on error)
-5. If lock cannot be acquired: report "Another semver operation is in progress" and stop
-6. On any failure inside the lock: clean up partial changes (`git checkout VERSION CHANGELOG.md`), release lock, report error
-
-## Version Increment Logic
-
-```
-Given current version MAJOR.MINOR.PATCH:
-  major → (MAJOR+1).0.0
-  minor → MAJOR.(MINOR+1).0
-  patch → MAJOR.MINOR.(PATCH+1)
-```
-
-To parse: strip the version prefix (if any), split on `.`, extract three integers.
-To format: rejoin with `.`, prepend the configured version prefix.
+Report final status.

@@ -9,7 +9,7 @@ The semver plugin stores per-project configuration in `.semver/config.yaml` at t
 tracking: true
 
 # Auto-bump sub-feature (requires tracking: true)
-auto_bump: false
+auto_bump: true
 
 # When auto-bump fires, ask user to confirm before bumping
 # true = propose and wait for approval
@@ -38,7 +38,7 @@ target_branch: "main"
 | Field | Type | Default | Values |
 |-------|------|---------|--------|
 | `tracking` | bool | `true` | `true`, `false` |
-| `auto_bump` | bool | `false` | `true`, `false` |
+| `auto_bump` | bool | `true` | `true`, `false` |
 | `auto_bump_confirm` | bool | `true` | `true`, `false` |
 | `version_prefix` | string | `"v"` | `""`, `"v"` |
 | `git_tagging` | bool | `true` | `true`, `false` |

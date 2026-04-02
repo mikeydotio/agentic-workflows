@@ -1,8 +1,10 @@
 #!/usr/bin/env bash
 # Shared test fixtures and assertion helpers
 
-# Path to the hook runner under test
-RUNNER="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)/hooks/run-user-hooks.sh"
+# Paths to key executables under test
+PLUGIN_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+RUNNER="$PLUGIN_ROOT/hooks/run-user-hooks.sh"
+CLI="$PLUGIN_ROOT/bin/semver-cli"
 
 # Counters (managed by run-tests.sh)
 PASS_COUNT=0
