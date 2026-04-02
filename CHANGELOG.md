@@ -3,6 +3,13 @@
 All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
+## [v2.3.0] - 2026-04-01
+
+### Changed
+- **Pilot plugin renamed to Forge** — the unified idea-to-deployment pipeline is now `/forge` with all artifacts in `.forge/`, commit prefixes as `forge(<step>):`, and freshen source `--source forge`; all 11 sub-skill names unchanged (c87bb57)
+
+_[manual]_
+
 ## [v2.2.0] - 2026-04-01
 
 ### Added
