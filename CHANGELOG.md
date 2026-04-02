@@ -3,6 +3,13 @@
 All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
+## [v2.4.0] - 2026-04-02
+
+### Added
+- add Python CLI to minimize LLM round trips (1c220f5)
+
+_[manual]_
+
 ## [v2.3.0] - 2026-04-01
 
 ### Changed
