@@ -21,7 +21,7 @@ Most tasks benefit from optimizing a single LLM call with good context over depl
 6. **Evaluator-Optimizer** — Generate-evaluate loop with feedback
 7. **Autonomous Agent** — Dynamic tool use with environmental feedback loops
 
-**Our plugins use patterns 4-7.** The pilot execution loop is pattern 6 (Evaluator-Optimizer) wrapped in pattern 7 (Autonomous Agent). RCA uses pattern 5 (Orchestrator-Workers) with parallel evidence collection.
+**Our plugins use patterns 4-7.** The forge execution loop is pattern 6 (Evaluator-Optimizer) wrapped in pattern 7 (Autonomous Agent). RCA uses pattern 5 (Orchestrator-Workers) with parallel evidence collection.
 
 ## Agent-Computer Interface (ACI)
 
@@ -66,7 +66,7 @@ Most "agent failures" are orchestration and context-transfer issues, not agent c
 | **Handoff** | Agent transfers full control to another agent. Use for multi-stage workflows where each stage needs different expertise. |
 | **Agent-as-Tool** | Primary agent calls another as a subtask, retains control. Use when an orchestrator needs specialist input on a sub-problem. |
 
-Our plugins primarily use **Handoff** (pilot step transitions) with **Agent-as-Tool** for specialized checks (architect drift check during execution, security check during review).
+Our plugins primarily use **Handoff** (forge step transitions) with **Agent-as-Tool** for specialized checks (architect drift check during execution, security check during review).
 
 ## Preventing Failure Modes
 

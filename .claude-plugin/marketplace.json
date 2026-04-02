@@ -17,9 +17,9 @@
       "source": "./plugins/semver"
     },
     {
-      "name": "pilot",
+      "name": "forge",
       "description": "Unified idea-to-deployment pipeline — interrogation, research, design, planning, autonomous execution, review, validation, triage, documentation, and deployment",
-      "source": "./plugins/pilot"
+      "source": "./plugins/forge"
     },
     {
       "name": "sentry",

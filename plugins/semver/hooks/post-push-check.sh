@@ -44,11 +44,11 @@ GIT_TAGGING="$(get_config 'git_tagging' 'true')"
 # Tracking off -> silent exit
 [[ "$TRACKING" != "true" ]] && exit 0
 
-# Suppress auto-bump during pilot execution — pilot manages its own commit flow
-PILOT_STATE="${CWD}/.pilot/state.json"
-if [[ -f "$PILOT_STATE" ]]; then
-  PILOT_STATUS="$(jq -r '.status // empty' "$PILOT_STATE" 2>/dev/null)"
-  [[ "$PILOT_STATUS" == "running" ]] && exit 0
+# Suppress auto-bump during forge execution — forge manages its own commit flow
+FORGE_STATE="${CWD}/.forge/state.json"
+if [[ -f "$FORGE_STATE" ]]; then
+  FORGE_STATUS="$(jq -r '.status // empty' "$FORGE_STATE" 2>/dev/null)"
+  [[ "$FORGE_STATUS" == "running" ]] && exit 0
 fi
 
 # Check if push was to the target branch

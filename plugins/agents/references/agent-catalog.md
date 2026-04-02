@@ -33,7 +33,7 @@ Complete roster of agents available in the shared library at `plugins/agents/age
 
 ## Pipeline-Specific Agents
 
-### Pilot Pipeline
+### Forge Pipeline
 
 | Name | Tools | R/O | Description |
 |------|-------|-----|-------------|

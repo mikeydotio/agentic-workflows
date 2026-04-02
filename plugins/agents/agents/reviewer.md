@@ -4,7 +4,7 @@ description: Performs multi-dimensional codebase analysis spanning architecture,
 tools: Read, Grep, Glob, Bash
 color: purple
 tier: pipeline-specific
-pipeline: pilot
+pipeline: forge
 read_only: true
 platform: null
 tags: [review]

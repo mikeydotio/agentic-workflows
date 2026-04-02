@@ -17,7 +17,7 @@ Agentics is a Claude Code plugin marketplace (`mikeydotio/agentics`) providing p
 - `references/<topic>.md` — methodology docs and detailed protocols that skills reference (keeps SKILL.md lean)
 
 **Key design patterns**:
-- **Artifact-based resumption**: Plugins use namespaced artifact directories — pilot writes to `.pilot/`, rca to `.rca/<slug>/` (gitignored). Presence of specific files determines resume point.
+- **Artifact-based resumption**: Plugins use namespaced artifact directories — forge writes to `.forge/`, rca to `.rca/<slug>/` (gitignored). Presence of specific files determines resume point.
 - **Multi-agent orchestration**: One orchestrator skill spawns specialized agents at appropriate steps. Each agent has distinct tool access and perspective.
 - **One question at a time**: All user interactions use `AskUserQuestion` with exactly one question per call.
 - **Step exit protocol**: Every orchestrated step writes artifacts, handoff, commits, and queues freshen for context clearing before the next step.
@@ -26,14 +26,14 @@ Agentics is a Claude Code plugin marketplace (`mikeydotio/agentics`) providing p
 
 | Plugin | Skill | Purpose |
 |--------|-------|---------|
-| agents | `/agents` | Shared agent library — 27 research-backed specialist agent definitions (16 general-purpose, 3 platform-specific UX, 8 pipeline-specific) used by pilot, rca, and future plugins. |
-| pilot | `/pilot` | Unified idea-to-deployment pipeline: interrogation → research → design → planning → decompose → execute → review → validate → triage → document → deploy. Uses shared agents from the `agents` plugin. FIX/ESCALATE triage loop. Has SessionStart and Stop hooks. |
+| agents | `/agents` | Shared agent library — 27 research-backed specialist agent definitions (16 general-purpose, 3 platform-specific UX, 8 pipeline-specific) used by forge, rca, and future plugins. |
+| forge | `/forge` | Unified idea-to-deployment pipeline: interrogation → research → design → planning → decompose → execute → review → validate → triage → document → deploy. Uses shared agents from the `agents` plugin. FIX/ESCALATE triage loop. Has SessionStart and Stop hooks. |
 | rca | `/rca` | Root cause analysis: symptom intake → evidence collection → hypothesis formation → verification → remediation. Uses shared agents (investigator, evidence-collector, hypothesis-challenger, software-architect). |
 | semver | `/semver` | Version lifecycle: tracking, bumping, changelog generation, sync validation. Has SessionStart and PostToolUse hooks. |
 
 ## Runtime Dependencies
 
-**tmux** is a hard requirement for the freshen plugin and all hook-based context-clearing flows (pilot step transitions). Without tmux, these flows fall back to manual `/clear` instructions.
+**tmux** is a hard requirement for the freshen plugin and all hook-based context-clearing flows (forge step transitions). Without tmux, these flows fall back to manual `/clear` instructions.
 
 **Hook ordering**: When Claude Code's turn ends, tmux buffers keystrokes until the prompt accepts input. This means `/clear` sent by the Stop hook is not processed until all Stop hooks complete, so ordering between hooks is safe by design.
 

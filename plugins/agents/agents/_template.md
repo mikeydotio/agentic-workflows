@@ -11,7 +11,7 @@ description: <one-line description of role and core capabilities>
 tools: <comma-separated list from: Read, Write, Edit, Bash, Grep, Glob, WebSearch, WebFetch>
 color: <terminal color: green, red, blue, yellow, orange, purple, cyan>
 tier: general | platform-variant | pipeline-specific
-pipeline: pilot | rca | null
+pipeline: forge | rca | null
 read_only: true | false
 platform: cli | web | mobile | null
 tags: [subset of: design, review, implementation, testing, investigation, challenge, documentation, operations, legal, research]
@@ -24,7 +24,7 @@ tags: [subset of: design, review, implementation, testing, investigation, challe
 - `description`: One sentence. State what the agent does, not what it is.
 - `tools`: Only list tools the agent genuinely needs. Read-only agents must NOT list Write or Edit.
 - `color`: Visual differentiation in terminal output
-- `tier`: `general` (reusable), `platform-variant` (UX per platform), `pipeline-specific` (tied to pilot/rca workflow)
+- `tier`: `general` (reusable), `platform-variant` (UX per platform), `pipeline-specific` (tied to forge/rca workflow)
 - `read_only`: `true` if the agent should never modify files. Enforced via tool list AND post-execution integrity checks.
 - `tags`: Used for catalog filtering and team composition
 

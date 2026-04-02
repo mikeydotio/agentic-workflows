@@ -1,12 +1,12 @@
 # Tool Design Audit
 
-Audit of all tools across the agentics plugin ecosystem against five tool design principles from the Agentailor article. Covers storyhook MCP tools, freshen, sentry, semver, and pilot.
+Audit of all tools across the agentics plugin ecosystem against five tool design principles from the Agentailor article. Covers storyhook MCP tools, freshen, sentry, semver, and forge.
 
 ---
 
 ## 1. Storyhook MCP Tools
 
-Storyhook exposes 18 MCP tools (`mcp__storyhook__storyhook_*`) and a CLI (`story`) with ~40 commands. The pilot plugin uses the CLI exclusively via `references/storyhook-contract.md`.
+Storyhook exposes 18 MCP tools (`mcp__storyhook__storyhook_*`) and a CLI (`story`) with ~40 commands. The forge plugin uses the CLI exclusively via `references/storyhook-contract.md`.
 
 ### 1.1 Strategic Consolidation
 
@@ -25,13 +25,13 @@ Storyhook exposes 18 MCP tools (`mcp__storyhook__storyhook_*`) and a CLI (`story
 
 | Finding | Priority |
 |---------|----------|
-| **Dual interface confusion** — storyhook has both a CLI (`story`) and MCP tools (`mcp__storyhook__storyhook_*`). The pilot plugin uses only the CLI, ignoring the richer MCP tools. The CLAUDE.md in `.storyhook/` documents only the CLI. No document maps CLI commands to MCP equivalents. | **MEDIUM** |
+| **Dual interface confusion** — storyhook has both a CLI (`story`) and MCP tools (`mcp__storyhook__storyhook_*`). The forge plugin uses only the CLI, ignoring the richer MCP tools. The CLAUDE.md in `.storyhook/` documents only the CLI. No document maps CLI commands to MCP equivalents. | **MEDIUM** |
 | **MCP tool names are well-namespaced** — the `mcp__storyhook__storyhook_` prefix is verbose but unambiguous. The `storyhook_` prefix within the MCP namespace is redundant (`mcp__storyhook__storyhook_get_story` vs `mcp__storyhook__get_story`) but this is a storyhook project issue, not ours. | **LOW** |
 | **CLI command naming is inconsistent with MCP** — CLI uses `story HP-N is <state>` (positional, implicit), MCP uses `storyhook_update_story(id, state)` (explicit params). CLI uses `story HP-N precedes HP-M`, MCP uses `storyhook_add_relationship(a, relation, b)`. This creates confusion for agents choosing between interfaces. | **MEDIUM** |
 
 **Recommendations:**
 1. Add a CLI-to-MCP mapping table in `storyhook-contract.md` so agents know which interface to prefer.
-2. Decide on one canonical interface for pilot. MCP tools are preferable: they return structured JSON by default, accept typed parameters, and support batch operations. The CLI requires `--json` flags and output parsing.
+2. Decide on one canonical interface for forge. MCP tools are preferable: they return structured JSON by default, accept typed parameters, and support batch operations. The CLI requires `--json` flags and output parsing.
 3. If keeping the CLI, document which operations have no CLI equivalent (e.g., `decompose_spec`, `phase_list`).
 
 ### 1.3 Meaningful Context Returns
@@ -98,7 +98,7 @@ Freshen is a CLI script (`freshen.sh`) with three subcommands and two hooks (Sto
 | Finding | Priority |
 |---------|----------|
 | **Well-scoped** — three subcommands (`queue`, `status`, `cancel`) with clear verbs. No confusion with other tools. | -- |
-| **`--source` naming is used by consumers** (pilot, semver) to self-identify. Clear contract. | -- |
+| **`--source` naming is used by consumers** (forge, semver) to self-identify. Clear contract. | -- |
 
 No issues.
 
@@ -106,11 +106,11 @@ No issues.
 
 | Finding | Priority |
 |---------|----------|
-| **`queue` returns a human-readable confirmation** — "freshen: queued '/pilot continue' (source: pilot)". Sufficient for logging. | -- |
+| **`queue` returns a human-readable confirmation** — "freshen: queued '/forge continue' (source: forge)". Sufficient for logging. | -- |
 | **`status` returns human-readable text** — not machine-parseable. An agent checking whether a signal is pending would need to parse output strings. | **LOW** |
 
 **Recommendations:**
-1. Consider adding `--json` output to `freshen.sh status` for programmatic consumption (e.g., pilot's stop hook checking if freshen is pending).
+1. Consider adding `--json` output to `freshen.sh status` for programmatic consumption (e.g., forge's stop hook checking if freshen is pending).
 
 ### 2.4 Token Efficiency
 
@@ -121,7 +121,7 @@ No issues. Output is minimal (1-2 lines per operation).
 | Finding | Priority |
 |---------|----------|
 | **SKILL.md is clear and focused** — explains the 3-step mechanism, documents the tmux requirement, and provides the cross-plugin usage pattern. | -- |
-| **Missing: what happens when tmux is unavailable** — the skill says "fails with error" but does not document the fallback behavior for callers. Pilot's SKILL.md handles this (falls back to manual instructions) but the freshen SKILL.md should document it for all consumers. | **LOW** |
+| **Missing: what happens when tmux is unavailable** — the skill says "fails with error" but does not document the fallback behavior for callers. Forge's SKILL.md handles this (falls back to manual instructions) but the freshen SKILL.md should document it for all consumers. | **LOW** |
 
 **Recommendations:**
 1. Add a "Fallback behavior" section to the freshen SKILL.md documenting what callers should do when tmux is unavailable.
@@ -229,7 +229,7 @@ No issues. Context returns are among the best in the ecosystem.
 | Finding | Priority |
 |---------|----------|
 | **SessionStart hook output is a single line** — version string + optional warning. Minimal context cost per session. | -- |
-| **PostToolUse hook emits nothing for non-push commands** — multiple early exits (not Bash, not git push, not target branch, tracking off, pilot running). Only fires when relevant. | -- |
+| **PostToolUse hook emits nothing for non-push commands** — multiple early exits (not Bash, not git push, not target branch, tracking off, forge running). Only fires when relevant. | -- |
 | **SKILL.md is 680 lines** — one of the longest skill files. However, it covers 6 subcommands with full specifications. The "read references on demand" pattern keeps each individual invocation from loading all 7 reference files. | -- |
 | **Auto-bump message includes full analysis instructions** — ~2-3 lines of guidance embedded in the systemMessage. This is intentional (the agent needs to know what to do) but adds to context on every push. | **LOW** |
 
@@ -249,9 +249,9 @@ No issues. Semver has the most mature description quality in the ecosystem.
 
 ---
 
-## 5. Pilot Plugin
+## 5. Forge Plugin
 
-Pilot is an 11-skill orchestrator with 15 agents, session hooks, freshen integration, and storyhook integration. It is the most complex plugin.
+Forge is an 11-skill orchestrator with 15 agents, session hooks, freshen integration, and storyhook integration. It is the most complex plugin.
 
 ### 5.1 Strategic Consolidation
 
@@ -262,7 +262,7 @@ Pilot is an 11-skill orchestrator with 15 agents, session hooks, freshen integra
 | **Step exit protocol is 5 operations but properly atomic** — write artifacts, write handoff, commit, queue freshen, STOP. Cannot be reduced further without losing resumability. | -- |
 | **Review + Validate run in parallel** — good consolidation. These are independent evaluations that the orchestrator dispatches simultaneously rather than sequentially. | -- |
 | **Storyhook health check + runaway safeguard are checked every iteration** — these could be consolidated into a single "pre-iteration guard" that checks both conditions. Currently they are two separate code blocks. | **LOW** |
-| **`/pilot status` requires reading multiple files and querying storyhook** — artifact scan, config.json, state.json, handoffs, and storyhook stories. This is 5+ reads for a status display. A single `state.json` with embedded summary would reduce this, but would risk stale data. Current design is correct for accuracy. | -- |
+| **`/forge status` requires reading multiple files and querying storyhook** — artifact scan, config.json, state.json, handoffs, and storyhook stories. This is 5+ reads for a status display. A single `state.json` with embedded summary would reduce this, but would risk stale data. Current design is correct for accuracy. | -- |
 
 **Recommendations:**
 1. Switch decompose skill from sequential CLI calls to `storyhook_decompose_spec` MCP tool or `story decompose --stdin` CLI command. The PLAN.md markdown with `### Wave N` headings and `- [ ]` checkboxes is already the format `decompose_spec` expects. This eliminates 80+ calls and replaces them with 1.
@@ -272,13 +272,13 @@ Pilot is an 11-skill orchestrator with 15 agents, session hooks, freshen integra
 
 | Finding | Priority |
 |---------|----------|
-| **11 sub-skills share the `pilot` namespace** — `/pilot interrogate`, `/pilot research`, etc. Clear and scannable. | -- |
+| **11 sub-skills share the `forge` namespace** — `/forge interrogate`, `/forge research`, etc. Clear and scannable. | -- |
 | **Agent files are in the shared `agents` plugin** — `generator.md`, `evaluator.md`, etc. No namespace collision. | -- |
-| **Artifact namespace (`.pilot/`) is well-documented** — the full directory tree is listed in the SKILL.md. No collision with other plugins. | -- |
+| **Artifact namespace (`.forge/`) is well-documented** — the full directory tree is listed in the SKILL.md. No collision with other plugins. | -- |
 | **Storyhook-contract.md uses `story` CLI prefix** — distinct from `storyhook_*` MCP tools. But this creates the dual-interface issue noted in section 1.2. | **MEDIUM** |
 
 **Recommendations:**
-1. Pick one interface for storyhook interactions in pilot. MCP tools are preferable for batch operations (decompose) and structured returns. CLI is acceptable for simple state changes. Do not mix both.
+1. Pick one interface for storyhook interactions in forge. MCP tools are preferable for batch operations (decompose) and structured returns. CLI is acceptable for simple state changes. Do not mix both.
 
 ### 5.3 Meaningful Context Returns
 
@@ -290,7 +290,7 @@ Pilot is an 11-skill orchestrator with 15 agents, session hooks, freshen integra
 | **Evaluator feedback is stored as structured JSON in storyhook comments** — `{verdict, failures: [{criterion, evidence, suggestion}]}`. The generator can parse failures and address them specifically on retry. Excellent. | -- |
 | **State detection returns an enum** — the artifact scan produces a single state value (`interrogate`, `research`, `design`, etc.) that maps directly to a skill dispatch. No ambiguity. | -- |
 
-No issues. Pilot's context returns are well-designed.
+No issues. Forge's context returns are well-designed.
 
 ### 5.4 Token Efficiency
 
@@ -310,7 +310,7 @@ No issues. Pilot's context returns are well-designed.
 
 | Finding | Priority |
 |---------|----------|
-| **Pilot SKILL.md is a state machine specification** — artifact scan table, state detection pseudocode, command router, exit protocol. An agent can mechanically follow it. | -- |
+| **Forge SKILL.md is a state machine specification** — artifact scan table, state detection pseudocode, command router, exit protocol. An agent can mechanically follow it. | -- |
 | **Hard Rules section is concise and numbered** — 10 rules, each one sentence. Easy to reference ("violates rule 3"). | -- |
 | **Agent roster table maps agents to skills** — an agent knows which specialists are available at each step. | -- |
 | **storyhook-contract.md documents commands that DO NOT exist** — prevents agents from trying `story decompose` (which actually does exist now) or `storyhook_bulk_create` (which also exists). This section is stale. | **HIGH** |
@@ -326,7 +326,7 @@ No issues. Pilot's context returns are well-designed.
 
 ### Storyhook Interface Fragmentation (HIGH)
 
-The most significant cross-cutting issue: storyhook has three interfaces (CLI, MCP tools, direct file access) and no single source of truth for which to use. The pilot plugin uses only the CLI and explicitly tells agents the MCP tools do not exist. Meanwhile, the MCP tools offer batch operations that would eliminate the biggest performance bottleneck (story creation in decompose).
+The most significant cross-cutting issue: storyhook has three interfaces (CLI, MCP tools, direct file access) and no single source of truth for which to use. The forge plugin uses only the CLI and explicitly tells agents the MCP tools do not exist. Meanwhile, the MCP tools offer batch operations that would eliminate the biggest performance bottleneck (story creation in decompose).
 
 **Recommendation:** Create a unified storyhook interface guide that:
 1. Maps every operation to the best interface (CLI for simple state changes, MCP for batch operations and queries)
@@ -338,7 +338,7 @@ The most significant cross-cutting issue: storyhook has three interfaces (CLI, M
 Hooks across plugins use different output patterns:
 - Sentry: `[sentry]` prefix in `additionalContext`
 - Semver: plain text in `additionalContext` or `systemMessage` with `[!DESYNC]` markers
-- Pilot: plain text in `additionalContext`
+- Forge: plain text in `additionalContext`
 - Freshen: no hook output (hooks manage side effects silently)
 
 This works but is not standardized. Consider a convention: `[plugin-name]` prefix on all hook-emitted messages.
@@ -357,4 +357,4 @@ Both sentry and semver parse YAML config files with `grep/sed` one-liners. This 
 | **MEDIUM** | 4 | CLI vs MCP interface confusion; `list_stories` has no pagination; `update_story` one-field-per-call limitation poorly documented; auto-bump trigger chain indirection |
 | **LOW** | 12 | Various minor documentation, output formatting, and edge case handling improvements |
 
-The highest-impact change is switching the decompose skill from sequential CLI calls to `storyhook_decompose_spec` or `story decompose --stdin`, which would reduce ~80 tool calls to 1 and eliminate the biggest latency bottleneck in the pilot pipeline.
+The highest-impact change is switching the decompose skill from sequential CLI calls to `storyhook_decompose_spec` or `story decompose --stdin`, which would reduce ~80 tool calls to 1 and eliminate the biggest latency bottleneck in the forge pipeline.

@@ -1,6 +1,6 @@
 # Cross-Plugin Usage Guide
 
-How consuming plugins (pilot, rca, future plugins) reference and use shared agents from the `agents` plugin.
+How consuming plugins (forge, rca, future plugins) reference and use shared agents from the `agents` plugin.
 
 ## File Path Convention
 
@@ -23,7 +23,7 @@ The spawning mechanism is unchanged from the current pattern. The orchestrator (
    Read plugins/agents/agents/generator.md
 
 2. Read any pipeline-specific override (if applicable):
-   Read plugins/pilot/agent-overrides/generator-context.md
+   Read plugins/forge/agent-overrides/generator-context.md
 
 3. Construct the prompt:
    Agent(
@@ -42,10 +42,10 @@ The spawning mechanism is unchanged from the current pattern. The orchestrator (
 When a shared agent needs context specific to a pipeline, the consuming plugin maintains override snippets:
 
 ```
-plugins/pilot/agent-overrides/
-├── generator-context.md      # Pilot-specific generator constraints
-├── evaluator-context.md      # Pilot-specific evaluation rules
-├── reviewer-context.md       # Pilot review step context
+plugins/forge/agent-overrides/
+├── generator-context.md      # Forge-specific generator constraints
+├── evaluator-context.md      # Forge-specific evaluation rules
+├── reviewer-context.md       # Forge review step context
 └── ...
 
 plugins/rca/agent-overrides/
@@ -70,7 +70,7 @@ This is transparent concatenation, not an inheritance system. The override adds 
 Overrides should contain ONLY pipeline-specific information:
 
 **Good override content:**
-- "Never modify `.pilot/` files — state files are managed by the orchestrator"
+- "Never modify `.forge/` files — state files are managed by the orchestrator"
 - "Your output will be stored as a storyhook comment — keep JSON under 4KB"
 - "This is Phase 2 of an RCA investigation — SYMPTOM.md has been read by the orchestrator"
 

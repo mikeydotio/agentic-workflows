@@ -4,7 +4,7 @@ description: Hardens test coverage with production-readiness tests, no-mock enfo
 tools: Read, Write, Edit, Bash, Grep, Glob
 color: yellow
 tier: pipeline-specific
-pipeline: pilot
+pipeline: forge
 read_only: false
 platform: null
 tags: [testing]

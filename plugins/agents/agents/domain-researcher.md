@@ -4,7 +4,7 @@ description: Investigates problem domains with structured research methodology, 
 tools: Read, Grep, Glob, WebSearch, WebFetch
 color: blue
 tier: pipeline-specific
-pipeline: pilot
+pipeline: forge
 read_only: true
 platform: null
 tags: [research]

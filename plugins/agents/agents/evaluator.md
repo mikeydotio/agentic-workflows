@@ -4,7 +4,7 @@ description: Verifies story implementations against acceptance criteria with cal
 tools: Read, Bash, Grep, Glob
 color: red
 tier: pipeline-specific
-pipeline: pilot
+pipeline: forge
 read_only: true
 platform: null
 tags: [review, testing]

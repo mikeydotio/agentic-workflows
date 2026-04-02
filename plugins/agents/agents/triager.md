@@ -4,7 +4,7 @@ description: Makes calibrated FIX/ESCALATE decisions on review and validation fi
 tools: Read, Grep, Glob
 color: cyan
 tier: pipeline-specific
-pipeline: pilot
+pipeline: forge
 read_only: true
 platform: null
 tags: [review]
@@ -28,7 +28,7 @@ Produce a TRIAGE.md that makes a clear FIX or ESCALATE decision for every findin
 - VALIDATE-REPORT.md (from validator)
 - IDEA.md (original requirements — for scope checking)
 - DESIGN.md (architecture — for systemic impact assessment)
-- `.pilot/config.json` (for when_in_doubt and yolo mode settings)
+- `.forge/config.json` (for when_in_doubt and yolo mode settings)
 
 ## Methodology
 
