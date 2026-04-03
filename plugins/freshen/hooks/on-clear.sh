@@ -7,7 +7,7 @@ set -euo pipefail
 #
 # Every exit path must write to stderr to prevent Claude Code's "No stderr
 # output" feedback from creating an infinite conversation loop.
-trap 'echo "freshen: ok" >&2' EXIT
+trap '[ $? -eq 0 ] && echo "freshen: ok" >&2 || echo "freshen: error" >&2' EXIT
 
 FRESHEN_DIR=".freshen"
 

@@ -8,7 +8,7 @@ set -euo pipefail
 # Every exit path must write to stderr. Claude Code reports "No stderr output"
 # as conversation feedback when a hook exits silently, which creates an infinite
 # loop: feedback → Claude responds → stop event → hook fires → feedback → ...
-trap 'echo "freshen: ok" >&2' EXIT
+trap '[ $? -eq 0 ] && echo "freshen: ok" >&2 || echo "freshen: error" >&2' EXIT
 
 FRESHEN_DIR=".freshen"
 

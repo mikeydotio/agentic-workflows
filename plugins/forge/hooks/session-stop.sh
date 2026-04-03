@@ -11,7 +11,7 @@
 # output" feedback from creating an infinite conversation loop.
 
 set -uo pipefail
-trap 'echo "forge: ok" >&2' EXIT
+trap '[ $? -eq 0 ] && echo "forge: ok" >&2 || echo "forge: error" >&2' EXIT
 
 # Locate project directory
 PROJECT_DIR="${CLAUDE_PROJECT_DIR:-}"
