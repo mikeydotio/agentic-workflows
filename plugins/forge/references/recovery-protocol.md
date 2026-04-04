@@ -10,6 +10,7 @@ Resume and recovery sequence for forge — restoring context after session bound
 - If heartbeat fresh (< `heartbeat_window_minutes`) → exit: "Work is already running"
 - If lock exists but heartbeat stale → break lock, log warning
 - Acquire new lock
+- Clear stale resume context: set `state.resume = null` (prevents prior session's resume metadata from persisting)
 
 ### 2. State Read
 

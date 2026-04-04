@@ -64,7 +64,7 @@ Present key findings as **plain text**:
 - "The standard architecture for this is [pattern]. I recommend we follow it."
 - "Common pitfall: [thing]. Our design should account for this."
 
-Use AskUserQuestion for significant decision points (e.g., whether to use an existing solution vs. build new).
+Use AskUserQuestion for significant decision points (e.g., whether to use an existing solution vs. build new). When constructing options, follow the format from `references/questioning.md`: include pros and cons in each option's description, and mark the recommended option (the one the system would choose in autonomous mode) with `(Recommended)` in its label.
 
 ### 5. Recommend Team Roster
 
@@ -109,7 +109,7 @@ Based on the project type identified in IDEA.md and research findings, write `.f
    - Context for Next Step: research summary, recommended stack, patterns to follow, pitfalls, team roster
    - Open Questions: design questions research could not resolve
 3. Commit: `git add .forge/ && git commit -m "forge(research): domain research + team roster"`
-4. Queue freshen: `bash plugins/freshen/bin/freshen.sh queue "/forge continue" --source forge`
+4. Queue freshen: `bash plugins/freshen/bin/freshen.sh queue "/forge design --orchestrated" --source forge --summary "Research complete — domain analysis and team roster"`
 5. STOP
 
 **If standalone:** Write outputs, report completion to user, exit.

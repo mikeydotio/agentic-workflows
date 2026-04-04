@@ -36,19 +36,21 @@ require_enabled() {
 
 cmd_queue() {
   require_enabled
-  local command="" source=""
+  local command="" source="" summary=""
 
   # Parse args
   while [[ $# -gt 0 ]]; do
     case "$1" in
       --source) source="$2"; shift 2 ;;
       --source=*) source="${1#*=}"; shift ;;
+      --summary) summary="$2"; shift 2 ;;
+      --summary=*) summary="${1#*=}"; shift ;;
       *) [ -z "$command" ] && command="$1" && shift || die "unexpected argument: $1" ;;
     esac
   done
 
-  [ -n "$command" ] || die "usage: freshen.sh queue <command> --source <name>"
-  [ -n "$source" ] || die "usage: freshen.sh queue <command> --source <name>"
+  [ -n "$command" ] || die "usage: freshen.sh queue <command> --source <name> [--summary <text>]"
+  [ -n "$source" ] || die "usage: freshen.sh queue <command> --source <name> [--summary <text>]"
 
   require_tmux
 
@@ -70,7 +72,11 @@ cmd_queue() {
     fi
   done
 
-  echo "$command" > "$signal_file"
+  if [ -n "$summary" ]; then
+    printf '%s\n%s\n' "$command" "$summary" > "$signal_file"
+  else
+    echo "$command" > "$signal_file"
+  fi
   echo "freshen: queued '${command}' (source: ${source})"
 }
 
@@ -81,7 +87,7 @@ cmd_status() {
     [ -f "$signal" ] || continue
     local src
     src=$(basename "$signal" .signal)
-    echo "  ${src}: $(cat "$signal")"
+    echo "  ${src}: $(head -1 "$signal")"
     found=1
   done
   [ "$found" -eq 1 ] || echo "  (no pending signals)"

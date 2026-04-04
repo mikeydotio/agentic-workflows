@@ -10,10 +10,10 @@ Before creating stories, check if `.forge/plan-mapping.json` exists:
 
 - **If exists**: Compute MD5 hash of PLAN.md and compare against `plan_hash` in the mapping
   - **Hash matches**: Offer three options via AskUserQuestion:
-    - "Continue with existing mapping" — resume from where we left off
-    - "Recreate stories (destructive)" — delete existing stories, create fresh
-    - "Cancel" — abort
-  - **Hash differs**: PLAN.md has changed since last decomposition. Warn user and offer same three options.
+    - "Continue with existing mapping (Recommended)" / "Resume from where we left off. Pros: no wasted work, preserves story state. Cons: won't pick up manual edits."
+    - "Recreate stories (destructive)" / "Delete existing stories, create fresh. Pros: clean slate. Cons: destroys all story progress."
+    - "Cancel" / "Abort. Pros: safe, no side effects. Cons: pipeline stalls."
+  - **Hash differs**: PLAN.md has changed since last decomposition. Warn user and offer same three options but mark "Recreate stories (destructive) (Recommended)" instead.
 - **If not exists**: Proceed with fresh decomposition
 
 ### 2. State Setup

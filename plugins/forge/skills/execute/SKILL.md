@@ -1,6 +1,6 @@
 ---
 name: execute
-description: Generator-evaluator execution loop with retry, canary mode, and session persistence. Implements stories autonomously through isolated subagent spawning.
+description: Generator-evaluator execution loop with retry and session persistence. Implements stories autonomously through isolated subagent spawning.
 argument-hint: "[--dry-run [--dry-run-mode all-pass|all-fail|mixed]]"
 ---
 
@@ -15,7 +15,6 @@ You are the execute skill. Your job is to implement stories autonomously through
 - `references/auto-resume.md` — Freshen-based auto-resume
 - `references/deterministic-checks.md` — Pre-checks before evaluator
 - `references/verification-protocol.md` — Evaluator criteria and debiasing
-- `references/canary-mode.md` — Supervised first-N-stories
 - `references/handoff-format.md` — Handoff artifact spec
 - `references/storyhook-contract.md` — Story CLI command mapping
 
@@ -53,7 +52,6 @@ You are the execute skill. Your job is to implement stories autonomously through
      "max_stories_per_session": 1,
      "max_sessions": 200,
      "max_total_retries": 20,
-     "canary_stories": 3,
      "heartbeat_window_minutes": 30
    }
    ```
@@ -89,10 +87,8 @@ loop:
   5. Evaluate (spawn evaluator subagent, read-only)
   5a. Post-evaluator integrity check (git diff)
   5b. Log verdict to verdicts.jsonl
-  6. Canary check (first N stories require user approval)
-  7. State management (update counters, check session limit)
-  8. Architectural drift check (every 3 stories or wave boundary)
-  9. Re-calibration prompt (every 10 stories)
+  6. State management (update counters, check session limit)
+  7. Architectural drift check (every 3 stories or wave boundary)
   retry: git checkout ., structured feedback, retry or block
   pause: write handoff (MUST include cold-start essentials), release lock, queue freshen
   complete: all stories done → transition to review+validate
@@ -158,7 +154,7 @@ Exercises full loop logic without API credits.
    - Test State (pass/fail/flaky, run command, env setup)
 2. Update state.json: `status: "paused"`, increment `sessions_completed`
 3. Release lock
-4. Queue freshen: `bash plugins/freshen/bin/freshen.sh queue "/forge continue" --source forge`
+4. Queue freshen: `bash plugins/freshen/bin/freshen.sh queue "/forge resume" --source forge --summary "Execution paused — [N] stories completed this session"`
 5. STOP
 
 ### Complete (all stories done)
@@ -169,7 +165,7 @@ When all stories reach `done`:
 2. Generate storyhook report: `story summary` + `story handoff`
 3. Write handoff to `.forge/handoffs/handoff-execute.md`
 4. Commit: `git add .forge/ && git commit -m "forge(execute): all stories complete"`
-5. Queue freshen for next step (review+validate): `bash plugins/freshen/bin/freshen.sh queue "/forge continue" --source forge`
+5. Queue freshen for next step (review+validate): `bash plugins/freshen/bin/freshen.sh queue "/forge continue" --source forge --summary "Execution complete — all stories done"`
 6. STOP
 
 **If standalone:** Same loop, but on completion return to user instead of queuing freshen.

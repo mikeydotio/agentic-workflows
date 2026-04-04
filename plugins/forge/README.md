@@ -79,7 +79,6 @@ After execution, Review + Validate run in parallel. Triage deliberates on findin
 
 ### Safety
 
-- Canary mode: first N stories require user approval
 - Runaway safeguards: max sessions, max retries, max fix cycles
 - Deploy: never without explicit user permission
 - Always pauses after Document step for user review

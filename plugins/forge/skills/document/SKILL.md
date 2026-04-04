@@ -36,7 +36,10 @@ Present documentation sections to the user as **plain text**. For key sections, 
 
 - **header:** "Docs OK?"
 - **question:** "Does this documentation capture everything important?"
-- **options:** ["Looks good", "Missing something", "Needs revision"]
+- **options:**
+  - "Looks good (Recommended)" / "Documentation is comprehensive and accurate. Pros: moves to deployment review. Cons: undiscovered gaps ship with the project."
+  - "Missing something" / "There's a topic or section not covered. Pros: fills documentation gaps before release. Cons: adds a writing cycle."
+  - "Needs revision" / "Existing content needs corrections or restructuring. Pros: improves doc quality. Cons: revision takes time."
 
 If changes needed, revise and re-present.
 
@@ -90,7 +93,7 @@ The technical writer may also create or update other documentation files (README
    - Context for Next Step: pipeline summary, ESCALATE status
    - Pipeline State: ESCALATE stories pending count
 3. Commit: `git add .forge/ && git commit -m "forge(document): project documentation"`
-4. Queue freshen: `bash plugins/freshen/bin/freshen.sh queue "/forge continue" --source forge`
+4. Queue freshen: `bash plugins/freshen/bin/freshen.sh queue "/forge continue" --source forge --summary "Documentation complete — ready for review"`
 5. STOP
 
 The orchestrator enters the **post-document pause** on next `continue` — it ALWAYS pauses here for user review, never auto-advances to deploy.

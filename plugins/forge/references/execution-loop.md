@@ -8,7 +8,7 @@ Before entering the loop, the caller must have:
 1. Acquired the session lock
 2. Checked auto-resume capability (tmux availability)
 3. Read/created `.forge/config.json`
-4. Read/created `.forge/state.json` with `status: "running"`
+4. Read/created `.forge/state.json` with `status: "running"` and `resume: null` (clear stale resume context)
 5. Verified `.forge/plan-mapping.json` exists
 
 ## Loop
@@ -211,25 +211,7 @@ Append to `.forge/verdicts.jsonl`:
 {"story": "HP-N", "attempt": <attempt_number>, "verdict": "pass|fail", "failures": [...], "timestamp": "<now>"}
 ```
 
-### Step 6: Canary Check
-
-```
-If state.canary_remaining > 0:
-  Present evaluator verdict to user via AskUserQuestion:
-    header: "Canary Review: <story title>"
-    question: "<verdict summary>. Do you agree with this assessment?"
-    options: ["Approved", "Override — I disagree", "Pause — let me review"]
-
-  If "Approved" → canary_remaining -= 1, proceed
-  If "Override" →
-    If evaluator passed but user disagrees → story HP-N is todo (retry)
-    If evaluator failed but user approves → commit, story HP-N is done
-  If "Pause" → goto pause
-```
-
-See `references/canary-mode.md` for full protocol.
-
-### Step 7: State Management
+### Step 6: State Management
 
 ```
 Update state.json:
@@ -254,7 +236,7 @@ If stories_this_session >= config.max_stories_per_session:
 
 `stories_this_session` counts unique stories reaching `done`, not total iterations. A story that retries 3 times and passes counts as 1.
 
-### Step 8: Architectural Drift Check
+### Step 7: Architectural Drift Check
 
 ```
 Track stories_since_last_architect_review (in-memory counter, not persisted)
@@ -276,14 +258,6 @@ If completed story was last in its wave OR stories_since_last_architect_review >
 ```
 
 **Dry-run mode**: Skip architect review.
-
-### Step 9: Re-Calibration Prompt
-
-```
-If state.stories_attempted % 10 == 0 AND state.canary_remaining == 0:
-  Log note in handoff.md:
-    "10 stories since last calibration check — review recent verdicts in .forge/verdicts.jsonl"
-```
 
 ### Retry
 
@@ -321,11 +295,16 @@ pause:
   write_handoff()
   state.status = "paused"
   state.sessions_completed += 1
+  state.resume = {
+    command: "/forge resume",
+    handoff_file: "handoffs/handoff-execute.md",
+    summary: "Execution paused — {stories_this_session} stories completed. {reason}"
+  }
   Write state.json to disk
   Release lock (delete lock.json)
 
   # Queue automatic context clear + resume via freshen:
-  #   bash plugins/freshen/bin/freshen.sh queue "/forge resume" --source forge
+  #   bash plugins/freshen/bin/freshen.sh queue "/forge resume" --source forge --summary "Execution paused — [N] stories completed"
   # If the queue command fails (tmux not available), log a warning:
   #   "Auto-resume unavailable. Run /forge resume manually."
   # Do NOT treat freshen failure as a fatal error — pause completes normally.
@@ -366,6 +345,7 @@ complete:
 
   # 5. Update state
   state.status = "complete"
+  state.resume = null
   Write state.json to disk
   Release lock (delete lock.json)
 ```

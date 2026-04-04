@@ -130,8 +130,8 @@ If handoff.md is missing (crash without clean shutdown), the orchestrator MUST p
 - **header:** "Missing Handoff"
 - **question:** "The handoff document from the previous session is missing (`.forge/handoff.md`). Without it, the generator will work without knowledge of patterns and conventions established in prior sessions, which may cause inconsistencies."
 - **options:**
-  - "Continue anyway" / "Proceed using storyhook + state.json + git log — I can fill in context if needed"
-  - "Stop" / "Let me investigate what happened before resuming"
+  - "Continue anyway (Recommended)" / "Proceed using storyhook + state.json + git log — I can fill in context if needed. Pros: resumes execution immediately. Cons: generator works without established patterns, risking inconsistencies."
+  - "Stop" / "Let me investigate what happened before resuming. Pros: avoids compounding problems from the crash. Cons: pipeline stalls until manual investigation completes."
 
 If "Continue anyway", recovery falls back to:
 

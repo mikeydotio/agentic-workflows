@@ -21,7 +21,10 @@ Every orchestrated step follows the same exit pattern:
 1. **Write output artifacts** to `.forge/`
 2. **Write handoff**: `.forge/handoffs/handoff-<step>.md` with full context for next step
 3. **Commit**: `git add .forge/ && git commit -m "forge(<step>): <summary>"`
-4. **Queue freshen**: `bash plugins/freshen/bin/freshen.sh queue "/forge continue" --source forge`
+4. **Queue freshen**: `bash plugins/freshen/bin/freshen.sh queue "<next-command>" --source forge --summary "<step summary>"`
+   - Use the specific next step command when the transition is deterministic (e.g., `/forge research --orchestrated` after interrogate)
+   - Use `/forge continue` when the next step depends on runtime state (e.g., after triage, review/validate, execute completion)
+   - The `--summary` should be a brief, human-readable progress line describing what just completed
    - If freshen fails (no tmux), fall back to manual instructions:
      ```
      ---
@@ -153,9 +156,9 @@ If the orchestrator resumes and the expected handoff file is missing:
    - **header:** "Missing Handoff"
    - **question:** "The handoff document from the previous step is missing (`.forge/handoffs/handoff-<step>.md`). Without it, I'll be working with limited context about decisions and rationale from the prior step. The artifacts themselves are intact."
    - **options:**
-     - "Continue anyway" / "Proceed using only the artifact files — I can fill in context if needed"
-     - "Let me create it" / "I'll write the handoff document manually, then re-invoke"
-     - "Start this step over" / "Re-run the previous step to regenerate the handoff"
+     - "Continue anyway (Recommended)" / "Proceed using only the artifact files — I can fill in context if needed. Pros: unblocks the pipeline immediately. Cons: decisions and rationale from the prior step may be lost."
+     - "Let me create it" / "I'll write the handoff document manually, then re-invoke. Pros: restores full context. Cons: requires user effort and knowledge of the handoff format."
+     - "Start this step over" / "Re-run the previous step to regenerate the handoff. Pros: guaranteed correct context. Cons: re-does work that already completed."
 3. If "Continue anyway" -> proceed but note in plain text which context may be incomplete
 
 ## Step Rollback

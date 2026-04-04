@@ -39,7 +39,10 @@ If `.planning/ideate/` exists with artifacts (IDEA.md, DESIGN.md, PLAN.md, etc.)
 1. Use AskUserQuestion:
    - **header:** "Legacy Data"
    - **question:** "Found legacy ideate artifacts in `.planning/ideate/`. These are from the deprecated ideate plugin. Would you like to migrate them to the unified pipeline?"
-   - **options:** ["Migrate to .forge/", "Ignore — start fresh", "Keep both — I'll manage manually"]
+   - **options:**
+     - "Migrate to .forge/ (Recommended)" / "Copy legacy artifacts into the unified pipeline. Pros: cleanest path, single source of truth. Cons: original .planning/ideate/ files remain (manual cleanup)."
+     - "Ignore — start fresh" / "Discard legacy work and begin from scratch. Pros: no legacy baggage. Cons: loses prior interrogation/design work."
+     - "Keep both — I'll manage manually" / "Leave legacy in place, proceed with empty .forge/. Pros: full control, no data movement. Cons: two artifact trees to track."
 2. If "Migrate":
    - Copy `.planning/ideate/IDEA.md` → `.forge/IDEA.md`
    - Copy `.planning/ideate/research/` → `.forge/research/`
@@ -62,6 +65,7 @@ Parse the user's message to determine the subcommand. If the input is a bare ide
 |---------|--------|
 | `/forge` (no args) | Same as `continue` |
 | `/forge continue` | Detect state from artifacts, dispatch to next step |
+| `/forge resume` | Alias for `continue` — detect state from artifacts, dispatch to next step |
 | `/forge <step>` | Direct invocation of a step (standalone mode) |
 | `/forge <step> --orchestrated` | Step invoked by orchestrator (uses step exit protocol) |
 | `/forge status` | Show pipeline dashboard |
@@ -143,7 +147,7 @@ When ESCALATE stories are pending after Document:
 2. List FIX stories that were resolved and any FIX→ESCALATE promotions
 3. For each ESCALATE story, use `AskUserQuestion` to present:
    - The finding description
-   - All solution options with pros/cons (from the triage report)
+   - All solution options with pros/cons (from the triage report). Mark the team's recommended option with `(Recommended)` appended to its label.
    - Ask user to choose an approach
 4. After all ESCALATE stories are reviewed → dispatch to `plan --orchestrated` with user decisions
 
@@ -154,7 +158,10 @@ When no ESCALATE stories remain after Document:
 2. Use `AskUserQuestion`:
    - **header:** "Deploy?"
    - **question:** "Pipeline complete. Ready to deploy?"
-   - **options:** ["Deploy now", "Not yet — let me review first", "Done — no deployment needed"]
+   - **options:**
+     - "Deploy now (Recommended)" / "Proceed to deployment. Pros: completes the pipeline end-to-end. Cons: deployment is irreversible for some targets."
+     - "Not yet — let me review first" / "Pause so I can inspect the codebase. Pros: human verification before shipping. Cons: delays completion."
+     - "Done — no deployment needed" / "Mark pipeline complete without deploying. Pros: skips unnecessary deployment step. Cons: no automated deployment or smoke test."
 3. If "Deploy now" → write `.forge/DEPLOY-APPROVAL.md`, dispatch to `deploy --orchestrated`
 4. If "Not yet" → exit cleanly, user re-invokes when ready
 5. If "Done" → write `.forge/COMPLETION.md`, report completion
@@ -182,7 +189,9 @@ Every orchestrated step follows the same exit pattern:
 1. Write output artifacts to `.forge/`
 2. Write handoff: `.forge/handoffs/handoff-<step>.md` with full context for next step
 3. Commit: `git add .forge/ && git commit -m "forge(<step>): <summary>"`
-4. Queue freshen: `bash plugins/freshen/bin/freshen.sh queue "/forge continue" --source forge`
+4. Queue freshen: `bash plugins/freshen/bin/freshen.sh queue "<next-command>" --source forge --summary "<step summary>"`
+   - Use the specific next step command when deterministic (e.g., `/forge research --orchestrated`)
+   - Use `/forge continue` when next step depends on runtime state
    - If freshen fails (no tmux), fall back to manual instructions
 5. **STOP** — end response immediately. Do not proceed inline.
 
@@ -251,7 +260,6 @@ Graceful stop:
   "max_stories_per_session": 1,
   "max_sessions": 200,
   "max_total_retries": 20,
-  "canary_stories": 3,
   "heartbeat_window_minutes": 30
 }
 ```

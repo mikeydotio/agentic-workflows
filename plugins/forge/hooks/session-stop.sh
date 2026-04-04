@@ -91,8 +91,14 @@ if command -v story &>/dev/null; then
   fi
 fi
 
-# Update state in a single jq pipeline: set paused + increment sessions_completed + update timestamp
-jq '.status = "paused" | .sessions_completed = (.sessions_completed + 1) | .updated_at = (now | todate)' \
+# Update state in a single jq pipeline: set paused + increment sessions_completed + pre-compute resume context
+jq --arg hf "handoffs/handoff-execute.md" \
+   --arg sum "Session interrupted (stop hook). ${STORIES_THIS} stories this session, ${STORIES_ATTEMPTED} total. Duration: ${DURATION}. Degraded handoff." \
+   --arg cmd "/forge resume" \
+   '.status = "paused"
+    | .sessions_completed = (.sessions_completed + 1)
+    | .updated_at = (now | todate)
+    | .resume = {command: $cmd, handoff_file: $hf, summary: $sum}' \
   "$STATE_FILE" > "${STATE_FILE}.tmp" && mv "${STATE_FILE}.tmp" "$STATE_FILE"
 
 # Release lock
@@ -115,7 +121,7 @@ if [[ -n "${TMUX:-}" ]] && [[ -n "${TMUX_PANE:-}" ]]; then
     fi
   done
   if [[ "$CONFLICT" -eq 0 ]]; then
-    echo "/forge resume" > "$FRESHEN_DIR/forge.signal"
+    printf '/forge resume\nEmergency stop — session interrupted, degraded handoff written\n' > "$FRESHEN_DIR/forge.signal"
   fi
 fi
 

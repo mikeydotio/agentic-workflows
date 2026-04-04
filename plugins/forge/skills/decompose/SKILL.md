@@ -27,7 +27,14 @@ If `.forge/plan-mapping.json` exists:
 - Use AskUserQuestion:
   - **header:** "Existing Map"
   - **question:** Hash match/mismatch message + "How would you like to proceed?"
-  - **options:** ["Continue with existing mapping", "Recreate stories (destructive)", "Cancel"]
+  - **options (hash matches — plan unchanged):**
+    - "Continue with existing mapping (Recommended)" / "Resume from where we left off. Pros: no wasted work, preserves story state. Cons: won't pick up manual edits outside PLAN.md."
+    - "Recreate stories (destructive)" / "Delete existing stories and create fresh. Pros: clean slate if stories are corrupt. Cons: destroys all story progress and evaluator feedback."
+    - "Cancel" / "Abort decomposition. Pros: safe, no side effects. Cons: pipeline stalls until re-invoked."
+  - **options (hash differs — plan changed):**
+    - "Continue with existing mapping" / "Use old stories despite plan changes. Pros: preserves completed work. Cons: stories may not match the updated plan."
+    - "Recreate stories (destructive) (Recommended)" / "Delete old stories and decompose the updated plan. Pros: stories match current plan exactly. Cons: loses all prior story progress."
+    - "Cancel" / "Abort and investigate. Pros: safe, lets you review the changes. Cons: pipeline stalls."
 - If "Continue" -> skip decomposition, report existing mapping
 - If "Recreate" -> proceed with fresh decomposition
 - If "Cancel" -> exit
@@ -134,7 +141,7 @@ If DAG valid -> report story count and structure.
    - Context for Next Step: story-to-task mapping summary, wave ordering
    - Open Questions: any ambiguous task boundaries
 3. Commit: `git add .forge/ .storyhook/ && git commit -m "forge(decompose): create stories from plan"`
-4. Queue freshen: `bash plugins/freshen/bin/freshen.sh queue "/forge continue" --source forge`
+4. Queue freshen: `bash plugins/freshen/bin/freshen.sh queue "/forge execute --orchestrated" --source forge --summary "Decomposition complete — stories created"`
 5. STOP
 
 **If standalone:** Write outputs, report story count and structure to user, exit.

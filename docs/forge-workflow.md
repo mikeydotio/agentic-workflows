@@ -16,9 +16,9 @@ How the forge plugin turns a plan into a finished implementation while you walk 
         |
     /forge plan (decompose into stories)
         |
-    /forge run (canary mode: first 3 stories supervised)
+    /forge run (autonomous execution begins)
         |
-    Fully autonomous loop
+    Generator-evaluator loop
     (generator -> deterministic checks -> evaluator -> commit)
         |
     Session ends -> handoff -> timer fires -> resume
@@ -65,17 +65,7 @@ You see a summary like: *"Created 12 stories across 3 waves."*
 
 If you run `/forge plan` again on the same plan, it detects the existing mapping and asks whether to recreate, continue, or cancel.
 
-### 4. Canary mode -- watch the first few
-
-Work starts with `/forge run`. For the first 3 stories (configurable via `canary_stories`), it pauses after each one and shows you the evaluator's verdict. This is your chance to validate:
-
-- Is the generator producing good code?
-- Is the evaluator catching real issues (not being too generous)?
-- Are stories sized right for one agent session?
-
-Adjust the evaluator prompt or story granularity if needed. Once satisfied, execution goes fully autonomous.
-
-### 5. The autonomous loop
+### 4. The autonomous loop
 
 For each story, forge runs this sequence:
 
@@ -92,7 +82,7 @@ For each story, forge runs this sequence:
 
 At wave boundaries, an architect-reviewer subagent checks for consistency across all stories completed so far. If significant drift is detected, forge pauses for your review.
 
-### 6. Session handoff and auto-resume
+### 5. Session handoff and auto-resume
 
 After completing a configurable number of stories (`max_stories_per_session`, default 3-5), forge:
 
@@ -108,7 +98,7 @@ A **systemd timer** (or crontab entry) fires at a configurable interval (default
 
 You can be asleep, at lunch, in meetings. Each session picks up where the last one left off.
 
-### 7. Check in whenever you want
+### 6. Check in whenever you want
 
 `/forge status` shows a dashboard:
 
@@ -122,7 +112,7 @@ If something's blocked, read the evaluator feedback in the storyhook comments, m
 
 `/forge stop` gracefully shuts everything down -- writes handoff, releases lock, removes timer.
 
-### 8. Completion
+### 7. Completion
 
 When all stories are done, forge:
 
@@ -174,5 +164,4 @@ All settings live in `.forge/state.json` and are set at `/forge run` time:
 |---------|---------|-----------------|
 | `max_stories_per_session` | 5 | Stories completed before pausing for handoff |
 | `max_retries` | 4 | Generator-evaluator cycles before blocking a story |
-| `canary_remaining` | 3 | Stories that require your approval before full autonomy |
 | `trigger_interval` | 15m | How often the auto-resume timer fires |

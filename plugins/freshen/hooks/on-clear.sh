@@ -25,7 +25,13 @@ FRESHEN_DIR=".freshen"
 SIGNAL=$(ls -tr "$FRESHEN_DIR"/*.signal 2>/dev/null | head -1)
 [ -n "$SIGNAL" ] || { rm -f "$FRESHEN_DIR/.clear-pending"; exit 0; }
 
-COMMAND=$(cat "$SIGNAL")
+COMMAND=$(head -1 "$SIGNAL")
+SUMMARY=$(tail -n +2 "$SIGNAL" 2>/dev/null || true)
+
+# Display progress summary if present
+if [ -n "$SUMMARY" ]; then
+  echo "freshen: $SUMMARY"
+fi
 
 # tmux is required
 [ -n "${TMUX:-}" ] || { rm -f "$FRESHEN_DIR/.clear-pending"; exit 0; }

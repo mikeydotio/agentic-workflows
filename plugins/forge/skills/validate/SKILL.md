@@ -101,7 +101,7 @@ The validator writes tests for critical gaps found during analysis:
 3. Write `.forge/handoffs/handoff-validate.md` with:
    - Key Decisions: test results, coverage gaps
    - Context for Next Step: report summary for triage
-4. **If review is also complete** (check for `.forge/REVIEW-REPORT.md`): queue freshen
+4. **If review is also complete** (check for `.forge/REVIEW-REPORT.md`): queue freshen with `bash plugins/freshen/bin/freshen.sh queue "/forge continue" --source forge --summary "Review and validation complete"`
 5. **If review is not yet complete**: STOP without queuing freshen
 6. STOP
 

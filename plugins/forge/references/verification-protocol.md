@@ -79,9 +79,3 @@ story HP-N '{"verdict":"fail","failures":[...]}'
 
 On retry, the generator receives these structured fields — never raw freeform text. This prevents prompt injection via the evaluator-to-generator feedback path.
 
-## Calibration
-
-During canary mode (first N stories), the user reviews evaluator decisions:
-- If evaluator is too lenient → tighten criteria in the prompt
-- If evaluator is too strict → relax criteria
-- Calibration happens at runtime, not through upfront examples

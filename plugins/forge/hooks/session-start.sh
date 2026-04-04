@@ -31,35 +31,43 @@ if ! command -v jq &>/dev/null; then
   exit 0
 fi
 
-# Read status
-STATUS="$(jq -r '.status // empty' "$STATE_FILE" 2>/dev/null)" || exit 0
+# Read all fields in one jq call (including pre-computed resume context if available)
+RESUME_JSON="$(jq -r '{
+  status: .status,
+  sessions: (.sessions_completed // 0),
+  stories: (.stories_attempted // 0),
+  retries: (.total_retries // 0),
+  resume: (.resume // null)
+}' "$STATE_FILE" 2>/dev/null)" || exit 0
+
+STATUS="$(printf '%s' "$RESUME_JSON" | jq -r '.status // empty')"
 [[ -z "$STATUS" ]] && exit 0
+[[ "$STATUS" != "running" && "$STATUS" != "paused" ]] && exit 0
 
-# Only inject context for running or paused forge
-if [[ "$STATUS" != "running" && "$STATUS" != "paused" ]]; then
-  exit 0
-fi
+SESSIONS="$(printf '%s' "$RESUME_JSON" | jq -r '.sessions')"
+STORIES="$(printf '%s' "$RESUME_JSON" | jq -r '.stories')"
+RETRIES="$(printf '%s' "$RESUME_JSON" | jq -r '.retries')"
+RESUME_SUM="$(printf '%s' "$RESUME_JSON" | jq -r '.resume.summary // empty')"
+RESUME_CMD="$(printf '%s' "$RESUME_JSON" | jq -r '.resume.command // empty')"
+RESUME_HF="$(printf '%s' "$RESUME_JSON" | jq -r '.resume.handoff_file // empty')"
 
-# Build context message
-STORIES_ATTEMPTED="$(jq -r '.stories_attempted // 0' "$STATE_FILE" 2>/dev/null)"
-TOTAL_RETRIES="$(jq -r '.total_retries // 0' "$STATE_FILE" 2>/dev/null)"
-SESSIONS_COMPLETED="$(jq -r '.sessions_completed // 0' "$STATE_FILE" 2>/dev/null)"
+CTX="Forge ${STATUS}. Sessions: ${SESSIONS}, Stories: ${STORIES}, Retries: ${RETRIES}."
 
-CTX="Work is ${STATUS}. Sessions: ${SESSIONS_COMPLETED}, Stories attempted: ${STORIES_ATTEMPTED}, Retries: ${TOTAL_RETRIES}."
-
-# Append most recent handoff context if available
-HANDOFF_DIR="${PROJECT_DIR}/.forge/handoffs"
-if [[ -d "$HANDOFF_DIR" ]]; then
-  HANDOFF_FILE="$(ls -t "$HANDOFF_DIR"/handoff-*.md 2>/dev/null | head -1)"
-  if [[ -n "$HANDOFF_FILE" ]] && [[ -f "$HANDOFF_FILE" ]]; then
-    HANDOFF_CONTENT="$(cat "$HANDOFF_FILE" 2>/dev/null)"
-    if [[ -n "$HANDOFF_CONTENT" ]]; then
-      CTX="${CTX} Last handoff ($(basename "$HANDOFF_FILE")): ${HANDOFF_CONTENT}"
-    fi
+if [[ -n "$RESUME_SUM" ]]; then
+  # Pre-computed path — stop hook or orchestrator wrote resume context
+  CTX="${CTX} ${RESUME_SUM}"
+  [[ -n "$RESUME_CMD" ]] && CTX="${CTX} Resume: ${RESUME_CMD}."
+  [[ -n "$RESUME_HF" ]] && CTX="${CTX} Handoff: .forge/${RESUME_HF}"
+else
+  # Backward compat — old state.json without resume object
+  # Only emit handoff filename, never content
+  HANDOFF_DIR="${PROJECT_DIR}/.forge/handoffs"
+  if [[ -d "$HANDOFF_DIR" ]]; then
+    HANDOFF_FILE="$(ls -t "$HANDOFF_DIR"/handoff-*.md 2>/dev/null | head -1)"
+    [[ -n "$HANDOFF_FILE" ]] && CTX="${CTX} Handoff: $(basename "$HANDOFF_FILE")"
   fi
 fi
 
-# Use jq for safe JSON construction (handles quotes, backticks, newlines in handoff content)
 jq -n --arg ctx "$CTX" '{"additionalContext": $ctx}'
 
 exit 0

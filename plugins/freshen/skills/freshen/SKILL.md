@@ -1,7 +1,7 @@
 ---
 name: freshen
 description: Manage automatic context clearing — queue a /clear + re-invocation, check status, or cancel pending signals. Requires tmux.
-argument-hint: queue <command> --source <name> | status | cancel [--source <name> | --all] | enable | disable
+argument-hint: queue <command> --source <name> [--summary <text>] | status | cancel [--source <name> | --all] | enable | disable
 ---
 
 # Freshen: Automatic Context Clearing
@@ -27,7 +27,7 @@ Parse the ARGUMENTS to determine the subcommand:
 
 | Argument | Action |
 |----------|--------|
-| `queue <cmd> --source <name>` | Register a post-clear re-invocation signal |
+| `queue <cmd> --source <name> [--summary <text>]` | Register a post-clear re-invocation signal |
 | `status` | Show pending signals |
 | `cancel --source <name>` | Cancel a specific signal |
 | `cancel --all` | Cancel all pending signals |
@@ -50,8 +50,10 @@ Report the output to the user.
 To use freshen from another plugin's skill, have the orchestrator run:
 
 ```bash
-bash plugins/freshen/bin/freshen.sh queue "<command>" --source "<your-plugin-name>"
+bash plugins/freshen/bin/freshen.sh queue "<command>" --source "<your-plugin-name>" --summary "<progress text>"
 ```
+
+The `--summary` flag is optional. When provided, the summary is displayed as a progress breadcrumb after `/clear` completes and before the re-invocation command is sent.
 
 Then STOP (return from the skill). The freshen hooks handle `/clear` and re-invocation automatically.
 

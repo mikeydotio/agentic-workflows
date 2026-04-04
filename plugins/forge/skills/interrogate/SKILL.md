@@ -24,7 +24,10 @@ You are the interrogation skill. Your job is to take a raw idea and build such a
 Start with a single AskUserQuestion call:
 - **header:** "Your Idea"
 - **question:** "Tell me about your idea."
-- **options:** ["I have a specific problem to solve", "I have a concept I want to explore", "I want to build something like X but better"]
+- **options:**
+  - "I have a specific problem to solve (Recommended)" / "A concrete pain point driving this idea. Pros: most focused starting point, easiest to interrogate. Cons: may narrow scope prematurely."
+  - "I have a concept I want to explore" / "A broader vision to flesh out. Pros: open-ended exploration. Cons: takes longer to converge on specifics."
+  - "I want to build something like X but better" / "Improving on an existing solution. Pros: clear reference point for comparison. Cons: risks anchoring to X's design."
 
 If the user invoked `/forge <idea description>` or `/forge interrogate <idea>`, treat their message as the braindump and skip this initial question — jump straight to targeted questioning.
 
@@ -73,7 +76,10 @@ When you could write a clear, comprehensive spec, present your understanding as 
 
 - **header:** "Ready?"
 - **question:** "Ready to move to research and design, or want to explore more?"
-- **options:** ["Ready to proceed", "More to explore", "Something's missing — let me explain"]
+- **options:**
+  - "Ready to proceed (Recommended)" / "Enough clarity to move forward. Pros: maintains pipeline momentum. Cons: any gaps become design-phase surprises."
+  - "More to explore" / "There are areas we haven't covered yet. Pros: deeper understanding before committing. Cons: delays the pipeline."
+  - "Something's missing — let me explain" / "I have context you haven't asked about. Pros: prevents building on wrong assumptions. Cons: may revisit settled ground."
 
 If not ready, ask what's missing. Loop until they're ready.
 
@@ -125,7 +131,7 @@ Write `.forge/IDEA.md`:
    - Context for Next Step: top 5-7 requirements, challenged assumptions, research areas, existing solutions mentioned, user preferences/constraints
    - Open Questions: questions for research to answer, unvalidated assumptions
 3. Commit: `git add .forge/ && git commit -m "forge(interrogate): capture idea — [project name]"`
-4. Queue freshen: `bash plugins/freshen/bin/freshen.sh queue "/forge continue" --source forge`
+4. Queue freshen: `bash plugins/freshen/bin/freshen.sh queue "/forge research --orchestrated" --source forge --summary "Interrogation complete — captured idea [project name]"`
 5. STOP
 
 **If standalone:** Write `.forge/IDEA.md`, report completion to user, exit.

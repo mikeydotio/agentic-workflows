@@ -55,7 +55,10 @@ Sections to cover:
 For each section:
 - **header:** "Approve?"
 - **question:** "Does the [section name] look right?"
-- **options:** ["Approved", "Needs changes", "I have concerns"]
+- **options:**
+  - "Approved (Recommended)" / "This section is solid as-is. Pros: keeps design review moving. Cons: missed issues surface during planning."
+  - "Needs changes" / "I see specific things to adjust. Pros: catches problems early when changes are cheap. Cons: adds a revision cycle."
+  - "I have concerns" / "Something feels off but I need to articulate it. Pros: surfaces gut-level risks. Cons: may be hard to act on without specifics."
 
 If "Needs changes" — ask what to change via AskUserQuestion, revise, re-present.
 
@@ -109,7 +112,7 @@ After all sections are approved, write `.forge/DESIGN.md`:
    - Context for Next Step: component count and responsibilities, interface contracts, security/accessibility requirements, complexity areas, inter-component dependencies
    - Open Questions: implementation questions deferred to planning
 3. Commit: `git add .forge/ && git commit -m "forge(design): architecture design approved"`
-4. Queue freshen: `bash plugins/freshen/bin/freshen.sh queue "/forge continue" --source forge`
+4. Queue freshen: `bash plugins/freshen/bin/freshen.sh queue "/forge plan --orchestrated" --source forge --summary "Design approved — architecture finalized"`
 5. STOP
 
 **If standalone:** Write `.forge/DESIGN.md`, report completion to user, exit.

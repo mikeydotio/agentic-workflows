@@ -91,7 +91,7 @@ If multiple agents flag the same issue, merge into a single finding with the hig
    - Key Decisions: critical findings, alignment assessment
    - Context for Next Step: report summary for triage
 3. Commit: `git add .forge/ && git commit -m "forge(review): static analysis complete"`
-4. **If validate is also complete** (check for `.forge/VALIDATE-REPORT.md`): queue freshen
+4. **If validate is also complete** (check for `.forge/VALIDATE-REPORT.md`): queue freshen with `bash plugins/freshen/bin/freshen.sh queue "/forge continue" --source forge --summary "Review and validation complete"`
 5. **If validate is not yet complete**: STOP without queuing freshen (wait for validate to complete — the orchestrator handles this)
 6. STOP
 

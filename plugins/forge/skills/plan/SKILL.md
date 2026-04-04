@@ -101,7 +101,10 @@ Split large tasks.
 Present the plan as **plain text**, then use AskUserQuestion:
 - **header:** "Plan OK?"
 - **question:** "Does this implementation plan look right? Ready to execute?"
-- **options:** ["Approved — start building", "Needs adjustment", "I have concerns"]
+- **options:**
+  - "Approved — start building (Recommended)" / "Plan is sound, begin execution. Pros: fastest path to working software. Cons: mid-execution changes are more expensive."
+  - "Needs adjustment" / "I want to change task scope, ordering, or criteria. Pros: prevents wasted execution cycles. Cons: delays start of implementation."
+  - "I have concerns" / "Something about the approach worries me. Pros: catches strategic issues before code is written. Cons: may require re-engaging the planning team."
 
 If "Needs adjustment" — ask what to change, revise, re-present.
 
@@ -115,7 +118,7 @@ If "Needs adjustment" — ask what to change, revise, re-present.
    - Pipeline State: fix cycle count (if in FIX loop), yolo mode
    - Open Questions: execution preferences
 3. Commit: `git add .forge/ && git commit -m "forge(plan): implementation plan approved"`
-4. Queue freshen: `bash plugins/freshen/bin/freshen.sh queue "/forge continue" --source forge`
+4. Queue freshen: `bash plugins/freshen/bin/freshen.sh queue "/forge decompose --orchestrated" --source forge --summary "Plan approved — ready for decomposition"`
 5. STOP
 
 **If standalone:** Write `.forge/PLAN.md`, report completion to user, exit.

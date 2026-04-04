@@ -63,18 +63,21 @@ When the user describes something that might already exist or has established pa
 **Parameters:**
 - `header` — Short label, max 12 characters (e.g., "Scope", "Users", "Priority")
 - `question` — The actual question text. Build on what the user just said.
-- `options` — 2-4 concrete choices with `label` and `description`. The tool auto-adds "Other" for freeform input.
+- `options` — 2-4 concrete choices with `label` and `description`. Mark the autonomous-mode default with `(Recommended)` appended to its label. Each description includes the option meaning plus pros and cons: `"{meaning}. Pros: {benefit}. Cons: {trade-off}."` The tool auto-adds "Other" for freeform input.
 - `multiSelect` — Usually `false`. Use `true` only when choices aren't mutually exclusive.
 
 **Good options:**
 - Interpretations of what they might mean (reveals their actual intent)
 - Concrete choices that force a priority decision
 - Specific examples to confirm or deny
+- Each option with concise pros (why choose it) and cons (what you give up)
+- Exactly one option marked `(Recommended)` — the one the system would pick in fully autonomous mode
 
 **Bad options:**
 - Generic categories ("Technical", "Business", "Other")
 - Leading options that presume an answer
 - Options that all say the same thing in different words
+- Options missing pros/cons or without a recommended marker
 
 **When NOT to use AskUserQuestion:**
 - Sharing synthesis or summaries -> plain text
@@ -88,33 +91,33 @@ When the user describes something that might already exist or has established pa
 - header: "Scale"
 - question: "Scalable to what? Help me understand the target."
 - options:
-  - label: "Hundreds of users" / description: "Small team or internal tool scale"
-  - label: "Thousands of users" / description: "Product with real traction"
-  - label: "Just me, big data" / description: "Single user but heavy computation"
+  - label: "Hundreds of users" / description: "Small team or internal tool scale. Pros: simpler infra, faster to ship. Cons: may need rearchitecting if growth surprises you."
+  - label: "Thousands of users (Recommended)" / description: "Product with real traction. Pros: covers most realistic growth scenarios. Cons: more upfront design effort."
+  - label: "Just me, big data" / description: "Single user but heavy computation. Pros: no multi-tenancy complexity. Cons: different bottleneck profile than user-scale."
 
 **Making abstract concrete** — user describes a complex workflow:
 - header: "Walkthrough"
 - question: "Walk me through using this from the very first step. What do you do?"
 - options:
-  - label: "Open the app and..." / description: "Start from the UI entry point"
-  - label: "Run a command..." / description: "Start from the CLI"
-  - label: "It triggers on..." / description: "Start from an event/webhook"
+  - label: "Open the app and..." / description: "Start from the UI entry point. Pros: reveals the full user journey. Cons: only covers one interface."
+  - label: "Run a command... (Recommended)" / description: "Start from the CLI. Pros: fastest path to concrete details. Cons: skips visual/UX considerations."
+  - label: "It triggers on..." / description: "Start from an event/webhook. Pros: clarifies integration context. Cons: harder to walk through linearly."
 
 **Finding gaps** — user hasn't mentioned error handling:
 - header: "Failures"
 - question: "What happens when things go wrong?"
 - options:
-  - label: "Retry automatically" / description: "System recovers without user action"
-  - label: "Show error to user" / description: "User sees what failed and can fix it"
-  - label: "It shouldn't fail" / description: "The design prevents this — let me explain"
+  - label: "Retry automatically (Recommended)" / description: "System recovers without user action. Pros: best UX, handles transient issues. Cons: hides persistent failures."
+  - label: "Show error to user" / description: "User sees what failed and can fix it. Pros: transparency, user stays in control. Cons: more friction."
+  - label: "It shouldn't fail" / description: "The design prevents this — let me explain. Pros: if true, simplest path. Cons: rarely holds under real-world conditions."
 
 **Devil's advocate:**
 - header: "Challenge"
 - question: "What's the strongest argument against building this?"
 - options:
-  - label: "Already solved" / description: "Something existing does this well enough"
-  - label: "Too complex" / description: "The effort outweighs the benefit"
-  - label: "No real demand" / description: "Users won't actually want this"
+  - label: "Already solved (Recommended)" / description: "Something existing does this well enough. Pros: most productive challenge to confront early. Cons: may discourage if the answer is yes."
+  - label: "Too complex" / description: "The effort outweighs the benefit. Pros: forces scope honesty. Cons: complexity can be managed with good design."
+  - label: "No real demand" / description: "Users won't actually want this. Pros: validates the 'why'. Cons: hard to prove without market data."
 
 ### 4-Then-Check Pattern
 
@@ -122,9 +125,9 @@ After 4 AskUserQuestion calls on a topic:
 - header: "Direction"
 - question: "Want to go deeper on [topic], or move on? (Remaining areas: [list])"
 - options:
-  - label: "Go deeper" / description: "More questions on [topic]"
-  - label: "Move on" / description: "Probe the next area"
-  - label: "Done questioning" / description: "I think we've covered enough"
+  - label: "Go deeper" / description: "More questions on [topic]. Pros: thoroughness reduces rework later. Cons: delays progress on other areas."
+  - label: "Move on (Recommended)" / description: "Probe the next area. Pros: maintains momentum across all topics. Cons: may miss depth on current topic."
+  - label: "Done questioning" / description: "I think we've covered enough. Pros: fastest path forward. Cons: unexamined gaps may surface later."
 
 ### Research Interruption Pattern
 

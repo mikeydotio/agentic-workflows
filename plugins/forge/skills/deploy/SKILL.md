@@ -38,7 +38,10 @@ Read IDEA.md and DESIGN.md to determine what deployment means for this project:
 Use AskUserQuestion to confirm the deployment approach:
 - **header:** "Deploy Plan"
 - **question:** "Here's what I'll do to deploy: [plan]. Proceed?"
-- **options:** ["Go ahead", "Adjust the plan", "Cancel deployment"]
+- **options:**
+  - "Go ahead (Recommended)" / "Execute the deployment plan. Pros: ships the project. Cons: rollback may be needed if issues surface post-deploy."
+  - "Adjust the plan" / "I want changes to the deployment approach. Pros: catches deployment risks. Cons: delays shipping."
+  - "Cancel deployment" / "Skip deployment entirely. Pros: no deployment risk. Cons: project remains unshipped."
 
 If "Cancel" → write COMPLETION.md without deployment, mark as complete.
 

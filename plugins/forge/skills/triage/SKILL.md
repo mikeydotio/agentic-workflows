@@ -117,7 +117,7 @@ Write `.forge/TRIAGE.md`:
    - Context for Next Step: FIX items for plan step (if any), ESCALATE count
    - Pipeline State: fix cycle count, yolo mode
 3. Commit: `git add .forge/ .storyhook/ && git commit -m "forge(triage): [FIX count] FIX, [ESCALATE count] ESCALATE"`
-4. Queue freshen: `bash plugins/freshen/bin/freshen.sh queue "/forge continue" --source forge`
+4. Queue freshen: `bash plugins/freshen/bin/freshen.sh queue "/forge continue" --source forge --summary "Triage complete — [FIX count] FIX, [ESCALATE count] ESCALATE"`
 5. STOP
 
 The orchestrator reads TRIAGE.md on next `continue`:

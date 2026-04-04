@@ -35,7 +35,6 @@ teardown() {
   assert_json_field "$TEST_PROJECT_DIR/.pilot/config.json" ".max_stories_per_session" "5"
   assert_json_field "$TEST_PROJECT_DIR/.pilot/config.json" ".max_sessions" "10"
   assert_json_field "$TEST_PROJECT_DIR/.pilot/config.json" ".max_total_retries" "20"
-  assert_json_field "$TEST_PROJECT_DIR/.pilot/config.json" ".canary_stories" "3"
   assert_json_field "$TEST_PROJECT_DIR/.pilot/config.json" ".trigger_interval" "15m"
   assert_json_field "$TEST_PROJECT_DIR/.pilot/config.json" ".heartbeat_window_minutes" "30"
 }

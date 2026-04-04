@@ -7,9 +7,9 @@ Freshen-based context clearing and re-invocation for autonomous execution.
 Forge uses the freshen plugin for automatic session transitions. When forge pauses (session limit reached, blocked, or any pause trigger), it queues a freshen signal. The sequence:
 
 1. **Pause**: Forge writes handoff, sets status to `paused`, releases lock
-2. **Queue**: Forge runs `bash plugins/freshen/bin/freshen.sh queue "/forge resume" --source forge`
+2. **Queue**: Forge runs `bash plugins/freshen/bin/freshen.sh queue "/forge resume" --source forge --summary "Execution paused — [reason]"`
 3. **Stop**: Session ends. Freshen's Stop hook detects the signal, sends `/clear` via tmux
-4. **Clear**: Context is wiped. Freshen's SessionStart(clear) hook reads the signal, sends `/forge resume` via tmux
+4. **Clear**: Context is wiped. Freshen's SessionStart(clear) hook reads the signal, echoes the summary as a progress breadcrumb, sends `/forge resume` via tmux
 5. **Resume**: New session starts. Forge's SessionStart hook injects state context. `/forge resume` acquires lock and continues
 
 This is fire-once: the signal file is consumed after use. Each pause must re-queue.
@@ -37,7 +37,7 @@ Else:
 At every pause point in the execution loop:
 
 ```bash
-bash plugins/freshen/bin/freshen.sh queue "/forge resume" --source forge
+bash plugins/freshen/bin/freshen.sh queue "/forge resume" --source forge --summary "Execution paused — [N] stories completed this session"
 ```
 
 If the queue command fails (tmux not available, freshen not installed):

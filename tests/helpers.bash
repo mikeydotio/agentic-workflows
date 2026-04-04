@@ -47,7 +47,6 @@ create_state_json() {
   "status": "$status",
   "trigger_name": "pilot-resume",
   "retry_counts": {},
-  "canary_remaining": 0,
   "stories_this_session": 0,
   "stories_attempted": 0,
   "total_retries": 0,
@@ -67,7 +66,6 @@ create_config_json() {
   "max_stories_per_session": 5,
   "max_sessions": 10,
   "max_total_retries": 20,
-  "canary_stories": 3,
   "trigger_interval": "15m",
   "heartbeat_window_minutes": 30
 }
