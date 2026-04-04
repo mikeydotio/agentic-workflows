@@ -3,6 +3,13 @@
 All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
+## [v2.6.0] - 2026-04-03
+
+### Added
+- extract deterministic plugin logic into scripts for token reduction (0723dd8)
+
+_[manual]_
+
 ## [v2.5.0] - 2026-04-03
 
 ### Added
