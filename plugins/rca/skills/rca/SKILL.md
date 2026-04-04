@@ -164,29 +164,26 @@ Create `.rca/<slug>/` and write `SYMPTOM.md`:
 [Files, functions, or components the user mentioned or that are likely involved]
 ```
 
-### Launch Background Investigation
+### Launch Investigation
 
-After writing SYMPTOM.md, spawn a **background agent** to run Phases 2-4 autonomously:
+After writing SYMPTOM.md, spawn an agent to run Phases 2-4:
 
 ```
 Agent(
   subagent_type: "general-purpose",
-  run_in_background: true,
-  prompt: <see Background Investigation Prompt below>
+  prompt: <see Investigation Prompt below>
 )
 ```
 
 Tell the user:
 
-"Investigation launched in the background. I'll analyze git history, architecture, and code patterns, then form and verify hypotheses. Run `/rca` again when you're ready to check on progress or review findings."
-
-End your response immediately. Do not call any more tools or generate additional content.
+"Starting investigation — analyzing git history, architecture, and code patterns, then forming and verifying hypotheses."
 
 ---
 
-## Background Investigation Prompt
+## Investigation Prompt
 
-The background agent receives the full RCA skill context and executes Phases 2-4 sequentially. Its prompt includes:
+The agent receives the full RCA skill context and executes Phases 2-4 sequentially. Its prompt includes:
 
 1. The three reference files (methodology, symptom-vs-root-cause, architectural-patterns)
 2. The SYMPTOM.md contents
@@ -195,11 +192,11 @@ The background agent receives the full RCA skill context and executes Phases 2-4
 5. **Read-only constraint**: "You must NOT modify any project source code. Bash commands must be read-only: git log, git blame, git diff, grep, test runs, file reads. Do NOT write to any file outside `.rca/<slug>/`."
 6. **Output size constraint**: "Keep each artifact under ~2000 lines. Summarize verbose tool output rather than including it verbatim."
 
-The background agent writes artifacts to `.rca/<slug>/` as it completes each phase. When Phase 4 completes, it writes `VERIFICATION.md` — this is the signal that the investigation is ready for review.
+The agent writes artifacts to `.rca/<slug>/` as it completes each phase. When Phase 4 completes, it writes `VERIFICATION.md` — this is the signal that the investigation is ready for review.
 
 ---
 
-## Phase 2: Evidence Collection (Background)
+## Phase 2: Evidence Collection
 
 Spawn multiple agents in parallel to gather evidence from different angles. Do NOT form hypotheses yet — gather facts.
 
@@ -232,7 +229,7 @@ If both agents return minimal or no relevant findings:
   - Consider providing more specific reproduction steps
   - The failure may be environmental — check runtime logs, monitoring dashboards
   ```
-- Stop the background investigation. The user will see the inconclusive status on next `/rca` invocation.
+- Stop the investigation. The user will see the inconclusive status on next `/rca` invocation.
 
 ### Synthesis
 
@@ -278,7 +275,7 @@ After all agents report, synthesize findings into `.rca/<slug>/EVIDENCE.md`:
 
 ---
 
-## Phase 3: Hypothesis Formation (Background)
+## Phase 3: Hypothesis Formation
 
 Form hypotheses. The key discipline: generate MULTIPLE competing explanations, never fall in love with the first one.
 
@@ -363,7 +360,7 @@ Write `.rca/<slug>/HYPOTHESES.md`:
 
 ---
 
-## Phase 4: Root Cause Verification (Background)
+## Phase 4: Root Cause Verification
 
 The most critical phase. Verify the top hypothesis rigorously. The temptation to accept a plausible explanation without verification is the #1 cause of band-aid fixes.
 
@@ -405,7 +402,7 @@ If ALL hypotheses are refuted and no new hypotheses can be generated from the ev
   - Consider a different investigation angle (environmental, data-driven)
   - The root cause may span multiple components — try a broader scope
   ```
-- Stop the background investigation.
+- Stop the investigation.
 
 ### Output
 

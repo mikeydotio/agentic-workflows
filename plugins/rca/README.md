@@ -50,4 +50,4 @@ Each investigation writes artifacts to `.rca/<slug>/` (gitignored):
 | `VERIFICATION.md` | 4 | Verified root cause with causal chain and heuristic checks |
 | `REMEDIATION.md` | 5 | Remediation plan with anti-pattern checks and regression prevention |
 
-Phase 1 is interactive. After intake, Phases 2-4 run in a background agent. The user re-invokes `/rca` to review completed investigations and proceed to Phase 5 (remediation).
+Phase 1 is interactive. After intake, Phases 2-4 run sequentially. Phase 5 (remediation) follows after verification.
