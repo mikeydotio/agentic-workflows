@@ -125,28 +125,19 @@ If checksums differ:
 
 ### Step 4: Deterministic Pre-Checks
 
-Follow `references/deterministic-checks.md`:
-
-1. **Test suite**: Run project tests
-   - If test fails → re-run failing test once
-   - If passes on re-run → flag as flaky, record in handoff.md, proceed
-   - If fails again → store feedback as storyhook comment → goto retry
-
-2. **Linter / type checker**: Run project linter
-   - If fails → store feedback → goto retry
-
-3. **Stub grep**: Scan modified files for TODO/FIXME/stub patterns
-   - If stubs found → store feedback → goto retry
-
-### Step 4a: Generator Scope Check
+Run the pre-checks script:
 
 ```bash
-git diff --name-only
+bash ${CLAUDE_PLUGIN_ROOT}/bin/forge-prechecks.sh --story-id HP-N --mapping .forge/plan-mapping.json
 ```
 
-Compare against `plan-mapping.json`'s `files_expected` for this story.
-
-- Unexpected files modified → log warning in handoff.md (warning only, not failure)
+Parse the JSON result:
+- If `all_passed` is true → proceed to evaluation
+- If any check has `passed: false`:
+  - Store failure details as storyhook comment: `story HP-N comment '{"check":"<name>","details":"<details>"}'`
+  - Goto retry
+- Flaky tests (in `flaky_tests` array) are flagged in handoff.md but do not count as failures
+- Scope warnings (unexpected files) are logged in handoff.md but do not count as failures
 
 ### Step 5: Evaluate
 

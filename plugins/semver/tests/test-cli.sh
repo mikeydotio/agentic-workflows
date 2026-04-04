@@ -687,7 +687,7 @@ test_auto_bump_start() {
     trap "cleanup_test_repo '$repo'" RETURN
 
     local out
-    out=$(cd "$repo" && "$CLI" auto-bump start)
+    out=$(cd "$repo" && "$CLI" auto-bump start --confirm true)
 
     assert_json_field "$out" ".ok" "true" "ok should be true" &&
     assert_json_field "$out" ".auto_bump" "true" "auto_bump should be true" &&

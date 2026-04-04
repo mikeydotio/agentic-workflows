@@ -94,6 +94,11 @@ def output_error(error_code, message, detail=None):
     sys.exit(1)
 
 
+def build_display(lines):
+    """Build display string from list of lines."""
+    return "\n".join(lines)
+
+
 # ─── Config ──────────────────────────────────────────────────────────────────
 
 class Config:
@@ -842,6 +847,18 @@ def cmd_current(args):
             result["last_version_date"] = None
             result["last_version_commit"] = None
 
+    # Build display
+    lines = []
+    if not version:
+        lines.append("[semver] No version set — run `/semver bump` to set the first version.")
+    else:
+        lines.append(f"[semver] {version} — {result.get('commit_count_since', 0)} commit(s) since {result.get('last_version_date', 'unknown')}")
+    auto = "on" if result["auto_bump"] else "off"
+    if result["auto_bump"]:
+        auto += " (confirm)" if result["auto_bump_confirm"] else " (auto)"
+    lines.append(f"  Auto-bump: {auto} | Branch: {result['target_branch']} | Tags: {'on' if result['git_tagging'] else 'off'}")
+    result["display"] = build_display(lines)
+
     output(result)
 
 
@@ -862,12 +879,24 @@ def cmd_validate(args):
         if key in summary:
             summary[key] += 1
 
+    # Build display
+    lines = ["[semver] Validation results:"]
+    for c in checks:
+        status_icon = {"PASS": "PASS", "FAIL": "FAIL", "WARN": "WARN", "SKIP": "SKIP"}[c["status"]]
+        lines.append(f"  [{status_icon}] {c['detail']}")
+    if summary["fail"] > 0:
+        lines.append(f"  Status: {summary['fail']} failure(s) — run `/semver repair` to fix.")
+    else:
+        lines.append("  Status: All checks passed.")
+    display = build_display(lines)
+
     output({
         "ok": True,
         "tracking": True,
         "checks": checks,
         "summary": summary,
         "all_pass": summary["fail"] == 0,
+        "display": display,
     })
 
 
@@ -909,6 +938,18 @@ def cmd_bump_gather(args):
     if version is None:
         result["version_exists"] = False
         result["questions_needed"].append("first_version")
+        result["questions"] = [{
+            "id": "first_version",
+            "header": "First version",
+            "question": "No version is set yet. What should the first version be?",
+            "options": [
+                {"label": "v0.1.0 (Recommended)"},
+                {"label": "v1.0.0"},
+                {"label": "v0.0.1"}
+            ],
+            "type": "first_version",
+        }]
+        result["display"] = build_display(["[semver] No version set — first version selection required."])
         output(result)
 
     result["version_exists"] = True
@@ -933,6 +974,8 @@ def cmd_bump_gather(args):
     if count == 0 and not force:
         result["no_commits"] = True
         result["message"] = f"No commits since the last version change ({version}). Use --force for a version-only bump."
+        result["questions"] = []
+        result["display"] = build_display([f"[semver] No commits since {version}. Use --force for a version-only bump."])
         output(result)
 
     # Get commit list for changelog
@@ -983,6 +1026,90 @@ def cmd_bump_gather(args):
     result["has_post_bump_prompt_hook"] = os.path.isfile(post_hook)
     if result["has_post_bump_prompt_hook"]:
         result["post_bump_prompt_hook_path"] = post_hook
+
+    # Build structured questions for the LLM
+    questions = []
+    if "dirty_tree" in result["questions_needed"]:
+        file_list = ", ".join(result["dirty_files"][:10])
+        if len(result["dirty_files"]) > 10:
+            file_list += f" (+{len(result['dirty_files']) - 10} more)"
+        questions.append({
+            "id": "dirty_tree",
+            "header": "Dirty tree",
+            "question": f"You have uncommitted changes: {file_list}. What would you like to do?",
+            "options": [
+                {"label": "Include all in bump commit"},
+                {"label": "Stash and bump clean"},
+                {"label": "Cancel"}
+            ],
+            "cancel_option": 2,
+            "flag_mapping": {
+                "0": "--dirty-action include",
+                "1": "--dirty-action stash",
+            },
+        })
+
+    if "wrong_branch" in result["questions_needed"]:
+        questions.append({
+            "id": "wrong_branch",
+            "header": "Branch",
+            "question": f"You're on branch `{result['current_branch']}`, not `{result['target_branch']}`. Bumping from a non-target branch means the tag may not be reachable from the target branch until merged. Proceed?",
+            "options": [
+                {"label": "Proceed anyway"},
+                {"label": "Cancel"}
+            ],
+            "cancel_option": 1,
+            "flag_mapping": {},
+        })
+
+    if "validation_failed" in result["questions_needed"]:
+        questions.append({
+            "id": "validation_failed",
+            "header": "Sync issue",
+            "question": "Validation found issues. Bumping on top of broken sync may compound the problem.",
+            "options": [
+                {"label": "Run repair first"},
+                {"label": "Bump anyway"},
+                {"label": "Cancel"}
+            ],
+            "cancel_option": 2,
+            "flag_mapping": {
+                "1": "--skip-validation",
+            },
+            "special_actions": {
+                "0": "run_repair_then_retry",
+            },
+        })
+
+    if result.get("tag_conflict"):
+        questions.append({
+            "id": "tag_conflict",
+            "header": "Tag conflict",
+            "question": f"Tag `{result['new_version']}` already exists. What should happen?",
+            "options": [
+                {"label": "Overwrite existing tag"},
+                {"label": "Skip tag creation"},
+                {"label": "Cancel"}
+            ],
+            "cancel_option": 2,
+            "flag_mapping": {
+                "0": "--overwrite-tag",
+                "1": "--skip-tag",
+            },
+        })
+
+    result["questions"] = questions
+
+    # Build display for gather
+    lines = []
+    if result.get("version_exists"):
+        lines.append(f"[semver] Preparing {bump_type} bump: {result['old_version']} → {result['new_version']}")
+        lines.append(f"  {result['commits_since_last_bump']} commit(s) since last version change")
+        if result["questions_needed"]:
+            lines.append(f"  Questions to resolve: {', '.join(result['questions_needed'])}")
+    else:
+        lines.append("[semver] No version set — first version selection required.")
+    result["display"] = build_display(lines)
 
     output(result)
 
@@ -1140,6 +1267,25 @@ def cmd_bump_execute(args):
             verification["changelog_has_entry"] = f"## [{new_version}]" in f.read()
     result["verification"] = verification
 
+    # Build display
+    lines = [f"[semver] Bumped {result['old_version']} → {result['new_version']} ({bump_type})"]
+    lines.append(f"  Commits included: {result.get('commits_included', 0)}")
+    if result.get("tag_created"):
+        tag_note = f"Tag: {new_version} created"
+        if result.get("tag_overwritten"):
+            tag_note += " (overwritten)"
+        lines.append(f"  {tag_note}")
+    elif result.get("tag_skipped"):
+        if result.get("tag_conflict"):
+            lines.append("  Tag: skipped (conflict)")
+        elif not tagging:
+            lines.append("  Tag: disabled")
+        else:
+            lines.append("  Tag: skipped")
+    if result.get("stash_applied"):
+        lines.append("  Stash: restored")
+    result["display"] = build_display(lines)
+
     output(result)
 
 
@@ -1192,12 +1338,18 @@ def cmd_bump_first_version(args):
         git("tag", version)
         tag_created = True
 
+    display_lines = [f"[semver] Initialized at {version}"]
+    display_lines.append("  CHANGELOG.md created")
+    if tag_created:
+        display_lines.append(f"  Tag: {version} created")
+
     output({
         "ok": True,
         "version": version,
         "changelog_created": True,
         "tag_created": tag_created,
         "commit_hash": commit_hash,
+        "display": build_display(display_lines),
     })
 
 
@@ -1287,6 +1439,11 @@ def _tracking_start_fresh(project_dir, config_path, args):
         git("tag", version)
         tag_created = True
 
+    display_lines = ["[semver] Tracking initialized"]
+    display_lines.append(f"  Branch: {branch} | Tags: {'on' if tagging else 'off'} | Changelog: {fmt}")
+    if version_set:
+        display_lines.append(f"  Version: {read_version_file(project_dir)}")
+
     output({
         "ok": True,
         "action": "fresh_start",
@@ -1299,6 +1456,7 @@ def _tracking_start_fresh(project_dir, config_path, args):
         "tag_created": tag_created,
         "files_created": files_created,
         "commit_hash": commit_hash,
+        "display": build_display(display_lines),
     })
 
 
@@ -1397,6 +1555,12 @@ def _tracking_start_from_archive(project_dir, config_path, archive, archive_path
     if tags_available and not args.restore_tags:
         result["questions_needed"].append("restore_tags")
 
+    display_lines = [f"[semver] Tracking restored from archive (archived {result['archive_date']})"]
+    display_lines.append(f"  Restored: {', '.join(result['restored'])}")
+    if result['tags_available'] and not result['tags_restored']:
+        display_lines.append(f"  Tags: {len(result['tag_list'])} available — not yet restored")
+    result["display"] = build_display(display_lines)
+
     output(result)
 
 
@@ -1427,7 +1591,8 @@ def cmd_tracking_restore_tags(args):
             else:
                 skipped += 1
 
-    output({"ok": True, "tags_restored": restored, "tags_skipped": skipped})
+    output({"ok": True, "tags_restored": restored, "tags_skipped": skipped,
+            "display": f"[semver] Tags restored: {restored}, skipped: {skipped}"})
 
 
 def cmd_tracking_stop_gather(args):
@@ -1451,6 +1616,48 @@ def cmd_tracking_stop_gather(args):
     if tagging and tags:
         questions.append("tag_deletion")
 
+    # Build structured questions
+    questions_list = []
+
+    archive_opts = [{"label": "VERSION file"}, {"label": "CHANGELOG"}]
+    if tagging and tags:
+        archive_opts.append({"label": "Git tags"})
+    questions_list.append({
+        "id": "archive_items",
+        "header": "Archive",
+        "question": "Which items to archive to VERSIONING_ARCHIVE.md before disabling tracking?",
+        "options": archive_opts,
+        "multi_select": True,
+        "answer_mapping": {
+            "VERSION file": "version",
+            "CHANGELOG": "changelog",
+            "Git tags": "tags",
+        },
+    })
+
+    if tagging and tags:
+        questions_list.append({
+            "id": "tag_deletion",
+            "header": "Remote tags",
+            "question": "Delete version tags from the remote too? Warning: this affects all collaborators.",
+            "options": [
+                {"label": "Delete local only (Recommended)"},
+                {"label": "Delete local and remote"},
+                {"label": "Don't delete tags"}
+            ],
+            "flag_mapping": {
+                "0": "--delete-tags local",
+                "1": "--delete-tags both",
+                "2": "--delete-tags none",
+            },
+            "condition": "tags_selected",
+        })
+
+    display_lines = ["[semver] Preparing to stop tracking"]
+    display_lines.append(f"  Current version: {version or 'none'}")
+    if tagging:
+        display_lines.append(f"  Tags: {len(tags)} version tag(s)")
+
     output({
         "ok": True,
         "tracking": True,
@@ -1461,6 +1668,8 @@ def cmd_tracking_stop_gather(args):
         "tag_count": len(tags),
         "tags": tags[:20],  # Limit for output size
         "questions_needed": questions,
+        "questions": questions_list,
+        "display": build_display(display_lines),
     })
 
 
@@ -1524,6 +1733,11 @@ def cmd_tracking_stop_execute(args):
 
     _, commit_hash, _ = git("rev-parse", "--short", "HEAD")
 
+    display_lines = ["[semver] Tracking stopped"]
+    display_lines.append(f"  Archived to: VERSIONING_ARCHIVE.md ({', '.join(items)})")
+    if tags_deleted_local > 0:
+        display_lines.append(f"  Tags deleted: {tags_deleted_local} local" + (f", {tags_deleted_remote} remote" if tags_deleted_remote > 0 else ""))
+
     output({
         "ok": True,
         "archive_path": "VERSIONING_ARCHIVE.md",
@@ -1533,6 +1747,7 @@ def cmd_tracking_stop_execute(args):
         "files_removed": files_removed,
         "claude_md_cleaned": claude_md_cleaned,
         "commit_hash": commit_hash,
+        "display": build_display(display_lines),
     })
 
 
@@ -1551,29 +1766,57 @@ def cmd_auto_bump(args):
     if action == "start":
         if config.get_bool("auto_bump"):
             output({"ok": True, "message": "Auto-bump is already enabled.",
-                    "auto_bump": True, "auto_bump_confirm": config.get_bool("auto_bump_confirm")})
-        confirm = args.confirm if args.confirm is not None else "true"
+                    "auto_bump": True, "auto_bump_confirm": config.get_bool("auto_bump_confirm"),
+                    "display": "[semver] Auto-bump is already enabled."})
+
+        if args.confirm is None:
+            output({
+                "ok": True,
+                "needs_input": True,
+                "questions": [{
+                    "id": "auto_bump_confirm",
+                    "header": "Confirm",
+                    "question": "Should Claude ask you to confirm the bump level before executing?",
+                    "options": [
+                        {"label": "Yes — confirm first (Recommended)"},
+                        {"label": "No — fully automatic"}
+                    ],
+                    "flag_mapping": {
+                        "0": "--confirm true",
+                        "1": "--confirm false",
+                    },
+                }],
+                "display": "[semver] Configuring auto-bump...",
+                "rerun_with_flags": True,
+            })
+
+        confirm = args.confirm
         config.set("auto_bump", "true")
         config.set("auto_bump_confirm", confirm)
         config.write()
+
+        confirm_str = "with confirmation" if confirm == "true" else "fully automatic"
         output({
             "ok": True,
             "auto_bump": True,
             "auto_bump_confirm": confirm == "true",
             "target_branch": config.get("target_branch"),
             "message": "Auto-bump is now enabled.",
+            "display": f"[semver] Auto-bump enabled ({confirm_str}) | Branch: {config.get('target_branch')}",
         })
 
     elif action == "stop":
         if not config.get_bool("auto_bump"):
             output({"ok": True, "message": "Auto-bump is not currently enabled.",
-                    "auto_bump": False})
+                    "auto_bump": False,
+                    "display": "[semver] Auto-bump is not currently enabled."})
         config.set("auto_bump", "false")
         config.write()
         output({
             "ok": True,
             "auto_bump": False,
             "message": "Auto-bump is now disabled.",
+            "display": "[semver] Auto-bump disabled.",
         })
 
 
@@ -1597,7 +1840,8 @@ def cmd_repair_diagnose(args):
     if summary["fail"] == 0:
         output({"ok": True, "all_pass": True, "checks": checks, "summary": summary,
                 "message": "All integrity checks passed. Nothing to repair.",
-                "repairs_needed": []})
+                "repairs_needed": [],
+                "display": "[semver] All integrity checks passed. Nothing to repair."})
 
     # Build repair suggestions
     repairs = []
@@ -1625,6 +1869,21 @@ def cmd_repair_diagnose(args):
                 "detail": c["detail"],
                 "options": ["create_tag_and_changelog", "revert_version", "skip"],
                 "context": {"current_version": version, "latest_tag": latest},
+                "question": {
+                    "id": "repair_tag_missing",
+                    "header": "Missing tag",
+                    "question": f"VERSION says `{version}` but no git tag exists.",
+                    "options": [
+                        {"label": "Create tag + changelog entry"},
+                        {"label": f"Revert VERSION to {latest}" if latest else "Skip"},
+                        {"label": "Skip"}
+                    ],
+                    "command_mapping": {
+                        "0": f"repair execute create-tag --version {version}",
+                        "1": f"repair execute revert-version --to {latest}" if latest else None,
+                        "2": None,
+                    },
+                },
             })
 
         elif c["name"] == "tag_correct_commit" and tagging:
@@ -1635,6 +1894,21 @@ def cmd_repair_diagnose(args):
                 "detail": c["detail"],
                 "options": ["move_tag", "revert_version", "skip"],
                 "context": {"version": version, "tag_commit": tc, "version_commit": lvc},
+                "question": {
+                    "id": "repair_tag_wrong_commit",
+                    "header": "Tag mismatch",
+                    "question": "Tag and VERSION point to different commits.",
+                    "options": [
+                        {"label": "Move tag to VERSION's commit"},
+                        {"label": "Revert VERSION to match tag"},
+                        {"label": "Skip"}
+                    ],
+                    "command_mapping": {
+                        "0": f"repair execute move-tag --version {version} --commit {lvc}",
+                        "1": f"repair execute revert-version --to {version}",
+                        "2": None,
+                    },
+                },
             })
 
         elif c["name"] == "changelog_entry":
@@ -1643,7 +1917,26 @@ def cmd_repair_diagnose(args):
                 "detail": c["detail"],
                 "options": ["generate_entry", "skip"],
                 "context": {"version": version},
+                "question": {
+                    "id": "repair_changelog_missing",
+                    "header": "Missing changelog",
+                    "question": f"Version `{version}` has no CHANGELOG entry.",
+                    "options": [
+                        {"label": "Generate entry"},
+                        {"label": "Skip"}
+                    ],
+                    "command_mapping": {
+                        "0": f"repair execute generate-entry --version {version}",
+                        "1": None,
+                    },
+                },
             })
+
+    # Build display
+    diag_lines = [f"[semver] Found {summary['fail']} issue(s) to repair:"]
+    for r in repairs:
+        diag_lines.append(f"  - {r['issue']}: {r['detail']}")
+    display = build_display(diag_lines)
 
     output({
         "ok": True,
@@ -1651,6 +1944,7 @@ def cmd_repair_diagnose(args):
         "checks": checks,
         "summary": summary,
         "repairs_needed": repairs,
+        "display": display,
     })
 
 
@@ -1683,7 +1977,8 @@ def cmd_repair_execute(args):
         git("commit", "-m", f"chore(release): {version} [repair]")
         git("tag", version)
         output({"ok": True, "action": "create_tag", "version": version,
-                "changelog_updated": True, "tag_created": True})
+                "changelog_updated": True, "tag_created": True,
+                "display": f"[semver] Repair: create-tag completed."})
 
     elif action == "revert-version":
         to_version = args.to
@@ -1694,7 +1989,8 @@ def cmd_repair_execute(args):
             f.write(to_version + "\n")
         git("add", "VERSION")
         git("commit", "-m", f"chore: revert VERSION to match tag {to_version}")
-        output({"ok": True, "action": "revert_version", "version": to_version})
+        output({"ok": True, "action": "revert_version", "version": to_version,
+                "display": f"[semver] Repair: revert-version completed."})
 
     elif action == "move-tag":
         version = args.version
@@ -1703,7 +1999,8 @@ def cmd_repair_execute(args):
             output_error("missing_arg", "--version and --commit required for move-tag")
         git("tag", "-d", version)
         git("tag", version, commit)
-        output({"ok": True, "action": "move_tag", "version": version, "commit": commit})
+        output({"ok": True, "action": "move_tag", "version": version, "commit": commit,
+                "display": f"[semver] Repair: move-tag completed."})
 
     elif action == "generate-entry":
         version = args.version
@@ -1722,7 +2019,8 @@ def cmd_repair_execute(args):
         prepend_changelog_entry(changelog_path, entry)
         git("add", "CHANGELOG.md")
         git("commit", "-m", f"chore: add missing CHANGELOG entry for {version} [repair]")
-        output({"ok": True, "action": "generate_entry", "version": version})
+        output({"ok": True, "action": "generate_entry", "version": version,
+                "display": f"[semver] Repair: generate-entry completed."})
 
     elif action == "update-version":
         to_version = args.to
@@ -1733,7 +2031,8 @@ def cmd_repair_execute(args):
             f.write(to_version + "\n")
         git("add", "VERSION")
         git("commit", "-m", f"chore: sync VERSION to match tag {to_version}")
-        output({"ok": True, "action": "update_version", "version": to_version})
+        output({"ok": True, "action": "update_version", "version": to_version,
+                "display": f"[semver] Repair: update-version completed."})
 
     elif action == "delete-tag":
         tag = args.tag
@@ -1744,7 +2043,8 @@ def cmd_repair_execute(args):
         if remote:
             git("push", "origin", "--delete", tag)
         output({"ok": True, "action": "delete_tag", "tag": tag,
-                "remote_deleted": bool(remote)})
+                "remote_deleted": bool(remote),
+                "display": f"[semver] Repair: delete-tag completed."})
 
     else:
         output_error("unknown_action", f"Unknown repair action: {action}")

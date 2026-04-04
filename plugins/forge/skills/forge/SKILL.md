@@ -81,64 +81,28 @@ Parse the user's message to determine the subcommand. If the input is a bare ide
 
 ## State Detection (`continue`)
 
-On every `continue` invocation:
+On every `continue` invocation, run the state detection script:
 
-1. Read most recent handoff from `.forge/handoffs/` (if any exist)
-2. Scan `.forge/` artifacts using the table below (bottom-up scan, **first match wins**)
+```bash
+bash ${CLAUDE_PLUGIN_ROOT}/bin/forge-state.sh
+```
+
+This returns JSON with `state`, `dispatch`, `fix_cycle`, `artifacts`, and `has_handoff`.
+
+1. If `has_handoff` is true, read the file at `latest_handoff` for context
+2. If `storyhook_available` is false and state requires storyhook data (`review_validate`, `execute`, `pause_escalate`), query storyhook via MCP tools to confirm the state
 3. Read the SKILL.md for the detected next step
-4. Dispatch to that step with `--orchestrated`
-
-### Artifact Scan Table
-
-| Artifacts Found | Next State | Dispatch To |
-|----------------|------------|-------------|
-| `COMPLETION.md` | complete | Done — report completion |
-| `DEPLOY-APPROVAL.md` | deploy | `deploy --orchestrated` |
-| `DOCUMENTATION.md` + no ESCALATE stories pending | pause | Prompt user for deploy permission |
-| `DOCUMENTATION.md` + ESCALATE stories pending | pause | ESCALATE review loop (see below) |
-| `TRIAGE.md` with FIX items + fix cycle < max | fix_loop | `plan --orchestrated` (fix cycle) |
-| `TRIAGE.md` with no FIX items | document | `document --orchestrated` |
-| `REVIEW-REPORT.md` + `VALIDATE-REPORT.md` | triage | `triage --orchestrated` |
-| All stories done (query storyhook) | review_validate | `review --orchestrated` + `validate --orchestrated` (parallel) |
-| `plan-mapping.json` + stories not all done | execute | `execute --orchestrated` |
-| `PLAN.md` + no `plan-mapping.json` | decompose | `decompose --orchestrated` |
-| `DESIGN.md` + no `PLAN.md` | plan | `plan --orchestrated` |
-| `research/SUMMARY.md` + no `DESIGN.md` | design | `design --orchestrated` |
-| `IDEA.md` + no `research/SUMMARY.md` | research | `research --orchestrated` |
-| Nothing in `.forge/` | interrogate | `interrogate --orchestrated` |
-
-### State Detection Implementation
-
-```
-Read .forge/ directory listing
-
-# Bottom-up scan (first match wins):
-if exists .forge/COMPLETION.md → state = complete
-elif exists .forge/DEPLOY-APPROVAL.md → state = deploy
-elif exists .forge/DOCUMENTATION.md:
-  check storyhook for ESCALATE stories → if pending: pause_escalate, else: pause_deploy
-elif exists .forge/TRIAGE.md:
-  read TRIAGE.md for FIX items
-  read .forge/config.json for max_fix_cycles (or max_fix_cycles_yolo if yolo)
-  read current fix cycle count from .forge/fix-cycles/
-  if FIX items AND cycle < max → state = fix_loop
-  elif no FIX items → state = document
-elif exists .forge/REVIEW-REPORT.md AND exists .forge/VALIDATE-REPORT.md → state = triage
-elif storyhook stories exist AND all done → state = review_validate
-elif exists .forge/plan-mapping.json AND storyhook has non-done stories → state = execute
-elif exists .forge/PLAN.md AND not exists .forge/plan-mapping.json → state = decompose
-elif exists .forge/DESIGN.md AND not exists .forge/PLAN.md → state = design
-elif exists .forge/research/SUMMARY.md AND not exists .forge/DESIGN.md → state = design
-elif exists .forge/IDEA.md AND not exists .forge/research/SUMMARY.md → state = research
-else → state = interrogate
-```
+4. Dispatch to the step indicated by `dispatch` with `--orchestrated`
 
 ### Fix Loop Handling
 
-When entering a fix loop:
-1. Archive current cycle: move `TRIAGE.md`, `PLAN.md`, `plan-mapping.json` to `.forge/fix-cycles/cycle-N/`
-2. Increment fix cycle counter
-3. Dispatch to `plan --orchestrated` with the FIX items as input
+When entering a fix loop, run the archive script first:
+
+```bash
+bash ${CLAUDE_PLUGIN_ROOT}/bin/forge-fix-archive.sh .forge
+```
+
+Then dispatch to `plan --orchestrated` with the FIX items as input.
 
 ### ESCALATE Review Loop (Post-Document Pause)
 
@@ -188,48 +152,26 @@ Every orchestrated step follows the same exit pattern:
 
 1. Write output artifacts to `.forge/`
 2. Write handoff: `.forge/handoffs/handoff-<step>.md` with full context for next step
-3. Commit: `git add .forge/ && git commit -m "forge(<step>): <summary>"`
-4. Queue freshen: `bash plugins/freshen/bin/freshen.sh queue "<next-command>" --source forge --summary "<step summary>"`
+3. Run the step exit helper for commit + freshen:
+   ```bash
+   bash ${CLAUDE_PLUGIN_ROOT}/bin/forge-step-exit.sh --step "<step>" --summary "<step summary>" --next "<next-command>"
+   ```
    - Use the specific next step command when deterministic (e.g., `/forge research --orchestrated`)
    - Use `/forge continue` when next step depends on runtime state
-   - If freshen fails (no tmux), fall back to manual instructions
-5. **STOP** — end response immediately. Do not proceed inline.
+   - If the helper reports `freshen_queued: false`, show the `fallback_message` to the user
+4. **STOP** — end response immediately. Do not proceed inline.
 
 ---
 
 ## `/forge status`
 
-Show pipeline dashboard:
+Run the status dashboard script:
 
-1. Read `.forge/` artifact listing to determine current step
-2. Read `.forge/config.json` for settings
-3. If execution phase: read `.forge/state.json` for runtime counters, query storyhook for story states
-4. List recent handoffs from `.forge/handoffs/`
-
-Display:
+```bash
+bash ${CLAUDE_PLUGIN_ROOT}/bin/forge-status.sh
 ```
-## Forge Pipeline Status
 
-**Current step**: [detected step]
-**Mode**: [normal | yolo]
-
-### Artifacts
-- IDEA.md: [exists/missing]
-- research/SUMMARY.md: [exists/missing]
-- DESIGN.md: [exists/missing]
-- PLAN.md: [exists/missing]
-- plan-mapping.json: [exists/missing]
-- [etc.]
-
-### Execution Progress (if in execute/review/validate/triage)
-[Story counts by state, retry counters, session count]
-
-### Fix Cycles
-[Current cycle N / max, history of prior cycles]
-
-### Recent Handoffs
-[Last 3 handoff filenames with timestamps]
-```
+Show the `display` field from the output to the user.
 
 ---
 

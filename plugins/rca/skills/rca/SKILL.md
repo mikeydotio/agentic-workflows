@@ -28,38 +28,25 @@ You are a root cause analysis orchestrator. Your job is to take a reported bug o
 When `/rca` is invoked, check for existing investigations:
 
 ```bash
-ls -d .rca/*/ 2>/dev/null
+bash ${CLAUDE_PLUGIN_ROOT}/bin/rca-status.sh
 ```
 
-### If investigations exist — List and Pick
+### If investigations exist (`count > 0`)
 
-Display all investigations with their status:
-
-| Investigation | Status | Created |
-|--------------|--------|---------|
-| `.rca/<slug>/` | running / complete / reviewed | timestamp from SYMPTOM.md |
-
-Status is determined by:
-- **running**: Background agent is still active (check if `VERIFICATION.md` exists — if not, still running)
-- **complete**: `VERIFICATION.md` exists but `REMEDIATION.md` does not — ready for user review
-- **reviewed**: `REMEDIATION.md` exists — investigation is done
+The script returns an `investigations` array with pre-built AskUserQuestion options. Present them:
 
 Use AskUserQuestion:
-
 - **header:** "RCA Investigations"
 - **question:** "You have existing investigations. What would you like to do?"
-- **options:**
-  - label: "Review [slug]" / description: "[one-line from SYMPTOM.md]" (for each complete investigation)
-  - label: "Check [slug]" / description: "Still running — check status" (for each running investigation)
-  - label: "New investigation" / description: "Start a fresh investigation"
+- **options:** Use each investigation's `option` object (label + description), plus add "New investigation" / "Start a fresh investigation"
 
-**If "Review":** Read the investigation artifacts, present a summary of findings, then proceed to Phase 5 (Remediation).
+**If "Review [slug]":** Read the investigation artifacts at `.rca/<slug>/`, present a summary of findings, then proceed to Phase 5 (Remediation).
 
-**If "Check":** Report what artifacts exist and what phase is in progress. The user can wait or start a new investigation.
+**If "Check [slug]":** Report what artifacts exist and what phase is in progress. The user can wait or start a new investigation.
 
 **If "New":** Proceed to Phase 1.
 
-### If no investigations exist — Start New
+### If no investigations exist (`count == 0`)
 
 Proceed directly to Phase 1.
 
