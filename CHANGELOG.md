@@ -3,6 +3,13 @@
 All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
+## [v2.8.0] - 2026-04-05
+
+### Added
+- add hard rule prohibiting background agent spawning (bfefc53)
+
+_[manual]_
+
 ## [v2.7.0] - 2026-04-04
 
 ### Added
