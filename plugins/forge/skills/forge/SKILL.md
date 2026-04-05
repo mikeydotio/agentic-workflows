@@ -30,6 +30,7 @@ You are the forge orchestrator — a thin state-machine router that detects pipe
 8. **`jq` for JSON construction** in all shell scripts. Never `printf` with string escaping.
 9. **One question at a time** via `AskUserQuestion`. Every user question uses exactly 1 `AskUserQuestion` call.
 10. **Never proceed inline between steps.** Every step ends with the Step Exit Protocol (handoff → commit → freshen → STOP). Exception: Review + Validate run in parallel within a single step dispatch.
+11. **All agents run in foreground.** Never use `run_in_background`. "In parallel" means multiple Agent() calls in a single message — the orchestrator waits for all to return before proceeding.
 
 ## Legacy Migration Detection
 

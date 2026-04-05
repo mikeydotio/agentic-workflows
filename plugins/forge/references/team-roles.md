@@ -92,3 +92,11 @@ Not every agent is needed for every project. The research step produces a `TEAM.
 - **Infrastructure:** Engineer, Architect, Security, Technical Writer
 
 The Devil's Advocate and Domain Researcher are always included regardless of project type.
+
+## Spawning Mechanics
+
+All agent spawns are **foreground**. Never set `run_in_background` on any Agent() call.
+
+To spawn agents in parallel: make multiple Agent() calls in a single message. The orchestrator blocks until all agents return their results, then synthesizes.
+
+This ensures every step completes all its agent work before writing artifacts and exiting.
